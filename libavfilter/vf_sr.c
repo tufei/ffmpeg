@@ -55,6 +55,9 @@ static const AVOption sr_options[] = {
 #if (CONFIG_LIBTENSORFLOW == 1)
     { "tensorflow", "tensorflow backend flag", 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0, FLAGS, "backend" },
 #endif
+#if (CONFIG_LIBONNXRUNTIME == 1)
+    { "onnxruntime", "onnxruntime backend flag", 0, AV_OPT_TYPE_CONST, { .i64 = 3 }, 0, 0, FLAGS, "backend" },
+#endif
     { "scale_factor", "scale factor for SRCNN model", OFFSET(scale_factor), AV_OPT_TYPE_INT, { .i64 = 2 }, 2, 4, FLAGS },
     { "model", "path to model file specifying network architecture and its parameters", OFFSET(model_filename), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, FLAGS },
     { NULL }
