@@ -102,7 +102,7 @@ static void get_qtable(int16_t *table, int quant, const uint8_t *quant_tab)
     }
 }
 
-static inline void idct_1d(int *blk, int step)
+static inline void idct_1d(unsigned *blk, int step)
 {
     const unsigned t0 = blk[0 * step] + blk[4 * step];
     const unsigned t1 = blk[0 * step] - blk[4 * step];
@@ -378,9 +378,6 @@ static int decode_coeffs(GetBitContext *gb, int16_t *coeffs, int nb_codes)
 
     for (int i = 0; i < nb_codes;) {
         int value = get_vlc2(gb, cbp_tab.table, cbp_tab.bits, 1);
-
-        if (value < 0)
-            return AVERROR_INVALIDDATA;
 
         if (value > 0) {
             int x = get_bits(gb, value);

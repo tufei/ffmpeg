@@ -116,6 +116,8 @@ typedef struct BiquadsContext {
     int csg;
     int transform_type;
 
+    int bypass;
+
     double gain;
     double frequency;
     double width;
@@ -138,21 +140,6 @@ typedef struct BiquadsContext {
                    double b0, double b1, double b2, double a1, double a2, int *clippings,
                    int disabled);
 } BiquadsContext;
-
-static av_cold int init(AVFilterContext *ctx)
-{
-    BiquadsContext *s = ctx->priv;
-
-    if (s->filter_type != biquad) {
-        if (s->frequency <= 0 || s->width <= 0) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid frequency %f and/or width %f <= 0\n",
-                   s->frequency, s->width);
-            return AVERROR(EINVAL);
-        }
-    }
-
-    return 0;
-}
 
 static int query_formats(AVFilterContext *ctx)
 {
@@ -388,16 +375,14 @@ static void biquad_latt_## name (BiquadsContext *s,                           \
         in   = ibuf[i];                                                       \
         t0   = in - k1 * s0;                                                  \
         t1   = t0 * k1 + s0;                                                  \
-        s0   = t1;                                                            \
         out += t1 * v2;                                                       \
                                                                               \
         t0    = t0 - k0 * s1;                                                 \
         t1    = t0 * k0 + s1;                                                 \
         out  += t1 * v1;                                                      \
-        s1    = t1;                                                           \
                                                                               \
         out  += t0 * v0;                                                      \
-        s0    = s1;                                                           \
+        s0    = t1;                                                           \
         s1    = t0;                                                           \
                                                                               \
         out = out * wet + in * dry;                                           \
@@ -449,12 +434,14 @@ static int config_filter(AVFilterLink *outlink, int reset)
     double K = tan(w0 / 2.);
     double alpha, beta;
 
-    if (w0 > M_PI) {
-        av_log(ctx, AV_LOG_ERROR,
-               "Invalid frequency %f. Frequency must be less than half the sample-rate %d.\n",
-               s->frequency, inlink->sample_rate);
-        return AVERROR(EINVAL);
+    s->bypass = (((w0 > M_PI || w0 <= 0.) && reset) || (s->width <= 0.)) && (s->filter_type != biquad);
+    if (s->bypass) {
+        av_log(ctx, AV_LOG_WARNING, "Invalid frequency and/or width!\n");
+        return 0;
     }
+
+    if ((w0 > M_PI || w0 <= 0.) && (s->filter_type != biquad))
+        return AVERROR(EINVAL);
 
     switch (s->width_type) {
     case NONE:
@@ -750,6 +737,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     ThreadData td;
     int ch;
 
+    if (s->bypass)
+        return ff_filter_frame(outlink, buf);
+
     if (av_frame_is_writable(buf)) {
         out_buf = buf;
     } else {
@@ -822,15 +812,15 @@ static const AVFilterPad outputs[] = {
 
 #define DEFINE_BIQUAD_FILTER(name_, description_)                       \
 AVFILTER_DEFINE_CLASS(name_);                                           \
-static av_cold int name_##_init(AVFilterContext *ctx) \
+static av_cold int name_##_init(AVFilterContext *ctx)                   \
 {                                                                       \
     BiquadsContext *s = ctx->priv;                                      \
     s->class = &name_##_class;                                          \
     s->filter_type = name_;                                             \
-    return init(ctx);                                             \
+    return 0;                                                           \
 }                                                                       \
                                                          \
-AVFilter ff_af_##name_ = {                         \
+AVFilter ff_af_##name_ = {                               \
     .name          = #name_,                             \
     .description   = NULL_IF_CONFIG_SMALL(description_), \
     .priv_size     = sizeof(BiquadsContext),             \
