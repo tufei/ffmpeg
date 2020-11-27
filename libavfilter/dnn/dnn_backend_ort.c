@@ -120,16 +120,18 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
                                        AVFrame *out_frame,
                                        int do_ioproc);
 
+#if 0
 static void free_buffer(void *data, size_t length)
 {
     av_freep(&data);
 }
+#endif
 
 static DNNReturnType allocate_input_tensor(const DNNModel *model,
                                            const DNNData *input,
                                            OrtValue **out)
 {
-    ORTModel *ort_model = (ORTModel *)model;
+    ORTModel *ort_model = (ORTModel *)model->model;
     ORTContext *ctx = &ort_model->ctx;
     const OrtApi *ort = ort_model->ort;
     OrtStatus **status = &ort_model->status;
@@ -149,8 +151,8 @@ static DNNReturnType allocate_input_tensor(const DNNModel *model,
     }
 
     *status = ort->CreateTensorAsOrtValue(ort_model->allocator, input_dims,
-                                         sizeof(input_dims) / sizeof(int64_t),
-                                         dt, out);
+                                          sizeof(input_dims) / sizeof(int64_t),
+                                          dt, out);
     if (*status) {
         av_log(ctx, AV_LOG_ERROR, "CreateTensorAsOrtValue(): %s\n",
                ort->GetErrorMessage(*status));
@@ -177,23 +179,14 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
     ORTContext *ctx = &ort_model->ctx;
     const OrtApi *ort = ort_model->ort;
     OrtStatus **status = &ort_model->status;
-    OrtTypeInfo *type = NULL;
-    const OrtTensorTypeAndShapeInfo *tensor = NULL;
+    OrtTensorTypeAndShapeInfo *tensor = NULL;
     ONNXTensorElementDataType data_type;
     int64_t dims[4];
-    size_t num_inputs = 0;
     size_t num_dims = 0;
 
-    *status = ort->SessionGetOutputTypeInfo(ort_model->session, 0, &type);
+    *status = ort->GetTensorTypeAndShape(output_tensor, &tensor);
     if (*status) {
-        av_log(ctx, AV_LOG_ERROR, "SessionGetOutputTypeInfo(): %s\n",
-               ort->GetErrorMessage(*status));
-        ort->ReleaseStatus(*status);
-        return DNN_ERROR;
-    }
-    *status = ort->CastTypeInfoToTensorInfo(type, &tensor);
-    if (*status) {
-        av_log(ctx, AV_LOG_ERROR, "CastTypeInfoToTensorInfo(): %s\n",
+        av_log(ctx, AV_LOG_ERROR, "GetTensorTypeAndShape(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
         return DNN_ERROR;
@@ -235,7 +228,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         return DNN_ERROR;
     }
 
-    ort->ReleaseTypeInfo(type);
+    ort->ReleaseTensorTypeAndShapeInfo(tensor);
 
     av_assert0(dims[0] == 1);
     output->channels = dims[1];
@@ -411,13 +404,13 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
 
     oab = OrtGetApiBase();
     if (NULL == oab) {
-        av_log(ctx, AV_LOG_ERROR, "error calling OrtGetApiBase()\n");
+        av_log(ctx, AV_LOG_ERROR, "Error calling OrtGetApiBase()\n");
         return DNN_ERROR;
     }
 
     ort_model->ort = oab->GetApi(ORT_API_VERSION);
-    if (NULL == ort) {
-        av_log(ctx, AV_LOG_ERROR, "error calling GetApi()\n");
+    if (NULL == ort_model->ort) {
+        av_log(ctx, AV_LOG_ERROR, "Error calling GetApi()\n");
         return DNN_ERROR;
     }
     ort = ort_model->ort;
@@ -518,6 +511,14 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
                                         ctx->options.inter_op_threads);
     if (*status) {
         av_log(ctx, AV_LOG_ERROR, "SetInterOpNumThreads(): %s\n",
+               ort->GetErrorMessage(*status));
+        ort->ReleaseStatus(*status);
+        return DNN_ERROR;
+    }
+
+    *status = ort->EnableCpuMemArena(ort_model->options);
+    if (*status) {
+        av_log(ctx, AV_LOG_ERROR, "EnableCpuMemArena(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
         return DNN_ERROR;
