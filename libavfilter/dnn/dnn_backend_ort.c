@@ -120,12 +120,21 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
                                        AVFrame *out_frame,
                                        int do_ioproc);
 
-#if 0
-static void free_buffer(void *data, size_t length)
+static void release_ort_context(ORTModel *ort_model)
 {
-    av_freep(&data);
+    if (ort_model->session) {
+        ort_model->ort->ReleaseSession(ort_model->session);
+    }
+    if (ort_model->options) {
+        ort_model->ort->ReleaseSessionOptions(ort_model->options);
+    }
+    if (ort_model->status) {
+        ort_model->ort->ReleaseStatus(ort_model->status);
+    }
+    if (ort_model->env) {
+        ort_model->ort->ReleaseEnv(ort_model->env);
+    }
 }
-#endif
 
 static DNNReturnType allocate_input_tensor(const DNNModel *model,
                                            const DNNData *input,
@@ -544,360 +553,6 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
     return DNN_SUCCESS;
 }
 
-#if 0
-#define NAME_BUFFER_SIZE 256
-
-static DNNReturnType add_conv_layer(ORTModel *ort_model, TF_Operation *transpose_op, TF_Operation **cur_op,
-                                    ConvolutionalParams* params, const int layer)
-{
-    ORTContext *ctx = &ort_model->ctx;
-    TF_Operation *op;
-    TF_OperationDescription *op_desc;
-    TF_Output input;
-    int64_t strides[] = {1, 1, 1, 1};
-    TF_Tensor *tensor;
-    int64_t dims[4];
-    int dims_len;
-    char name_buffer[NAME_BUFFER_SIZE];
-    int32_t size;
-
-    size = params->input_num * params->output_num * params->kernel_size * params->kernel_size;
-    input.index = 0;
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "conv_kernel%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "Const", name_buffer);
-    TF_SetAttrType(op_desc, "dtype", TF_FLOAT);
-    dims[0] = params->output_num;
-    dims[1] = params->kernel_size;
-    dims[2] = params->kernel_size;
-    dims[3] = params->input_num;
-    dims_len = 4;
-    tensor = TF_AllocateTensor(TF_FLOAT, dims, dims_len, size * sizeof(float));
-    memcpy(TF_TensorData(tensor), params->kernel, size * sizeof(float));
-    TF_SetAttrTensor(op_desc, "value", tensor, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to set value for kernel of conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add kernel to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "transpose%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "Transpose", name_buffer);
-    input.oper = op;
-    TF_AddInput(op_desc, input);
-    input.oper = transpose_op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    TF_SetAttrType(op_desc, "Tperm", TF_INT32);
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add transpose to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "conv2d%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "Conv2D", name_buffer);
-    input.oper = *cur_op;
-    TF_AddInput(op_desc, input);
-    input.oper = op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    TF_SetAttrIntList(op_desc, "strides", strides, 4);
-    TF_SetAttrString(op_desc, "padding", "VALID", 5);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add conv2d to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "conv_biases%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "Const", name_buffer);
-    TF_SetAttrType(op_desc, "dtype", TF_FLOAT);
-    dims[0] = params->output_num;
-    dims_len = 1;
-    tensor = TF_AllocateTensor(TF_FLOAT, dims, dims_len, params->output_num * sizeof(float));
-    memcpy(TF_TensorData(tensor), params->biases, params->output_num * sizeof(float));
-    TF_SetAttrTensor(op_desc, "value", tensor, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to set value for conv_biases of conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add conv_biases to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "bias_add%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "BiasAdd", name_buffer);
-    input.oper = *cur_op;
-    TF_AddInput(op_desc, input);
-    input.oper = op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add bias_add to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "activation%d", layer);
-    switch (params->activation){
-    case RELU:
-        op_desc = TF_NewOperation(ort_model->graph, "Relu", name_buffer);
-        break;
-    case TANH:
-        op_desc = TF_NewOperation(ort_model->graph, "Tanh", name_buffer);
-        break;
-    case SIGMOID:
-        op_desc = TF_NewOperation(ort_model->graph, "Sigmoid", name_buffer);
-        break;
-    default:
-        av_log(ctx, AV_LOG_ERROR, "Unsupported convolutional activation function\n");
-        return DNN_ERROR;
-    }
-    input.oper = *cur_op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add activation function to conv layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    return DNN_SUCCESS;
-}
-
-static DNNReturnType add_depth_to_space_layer(ORTModel *ort_model, TF_Operation **cur_op,
-                                              DepthToSpaceParams *params, const int layer)
-{
-    ORTContext *ctx = &ort_model->ctx;
-    TF_OperationDescription *op_desc;
-    TF_Output input;
-    char name_buffer[NAME_BUFFER_SIZE];
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "depth_to_space%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "DepthToSpace", name_buffer);
-    input.oper = *cur_op;
-    input.index = 0;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    TF_SetAttrInt(op_desc, "block_size", params->block_size);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add depth_to_space to layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    return DNN_SUCCESS;
-}
-
-static DNNReturnType add_pad_layer(ORTModel *ort_model, TF_Operation **cur_op,
-                                              LayerPadParams *params, const int layer)
-{
-    ORTContext *ctx = &ort_model->ctx;
-    TF_Operation *op;
-    TF_Tensor *tensor;
-    TF_OperationDescription *op_desc;
-    TF_Output input;
-    int32_t *pads;
-    int64_t pads_shape[] = {4, 2};
-
-    char name_buffer[NAME_BUFFER_SIZE];
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "pad%d", layer);
-
-    op_desc = TF_NewOperation(ort_model->graph, "Const", name_buffer);
-    TF_SetAttrType(op_desc, "dtype", TF_INT32);
-    tensor = TF_AllocateTensor(TF_INT32, pads_shape, 2, 4 * 2 * sizeof(int32_t));
-    pads = (int32_t *)TF_TensorData(tensor);
-    pads[0] = params->paddings[0][0];
-    pads[1] = params->paddings[0][1];
-    pads[2] = params->paddings[1][0];
-    pads[3] = params->paddings[1][1];
-    pads[4] = params->paddings[2][0];
-    pads[5] = params->paddings[2][1];
-    pads[6] = params->paddings[3][0];
-    pads[7] = params->paddings[3][1];
-    TF_SetAttrTensor(op_desc, "value", tensor, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to set value for pad of layer %d\n", layer);
-        return DNN_ERROR;
-    }
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add pad to layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    op_desc = TF_NewOperation(ort_model->graph, "MirrorPad", "mirror_pad");
-    input.oper = *cur_op;
-    input.index = 0;
-    TF_AddInput(op_desc, input);
-    input.oper = op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    TF_SetAttrType(op_desc, "Tpaddings", TF_INT32);
-    TF_SetAttrString(op_desc, "mode", "SYMMETRIC", 9);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add mirror_pad to layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    return DNN_SUCCESS;
-}
-
-static DNNReturnType add_maximum_layer(ORTModel *ort_model, TF_Operation **cur_op,
-                                       DnnLayerMaximumParams *params, const int layer)
-{
-    ORTContext *ctx = &ort_model->ctx;
-    TF_Operation *op;
-    TF_Tensor *tensor;
-    TF_OperationDescription *op_desc;
-    TF_Output input;
-    float *y;
-
-    char name_buffer[NAME_BUFFER_SIZE];
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "maximum/y%d", layer);
-
-    op_desc = TF_NewOperation(ort_model->graph, "Const", name_buffer);
-    TF_SetAttrType(op_desc, "dtype", TF_FLOAT);
-    tensor = TF_AllocateTensor(TF_FLOAT, NULL, 0, TF_DataTypeSize(TF_FLOAT));
-    y = (float *)TF_TensorData(tensor);
-    *y = params->val.y;
-    TF_SetAttrTensor(op_desc, "value", tensor, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to set value for maximum/y of layer %d", layer);
-        return DNN_ERROR;
-    }
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add maximum/y to layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    snprintf(name_buffer, NAME_BUFFER_SIZE, "maximum%d", layer);
-    op_desc = TF_NewOperation(ort_model->graph, "Maximum", name_buffer);
-    input.oper = *cur_op;
-    input.index = 0;
-    TF_AddInput(op_desc, input);
-    input.oper = op;
-    TF_AddInput(op_desc, input);
-    TF_SetAttrType(op_desc, "T", TF_FLOAT);
-    *cur_op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        av_log(ctx, AV_LOG_ERROR, "Failed to add maximum to layer %d\n", layer);
-        return DNN_ERROR;
-    }
-
-    return DNN_SUCCESS;
-}
-
-static DNNReturnType load_native_model(ORTModel *ort_model, const char *model_filename)
-{
-    ORTContext *ctx = &ort_model->ctx;
-    int32_t layer;
-    TF_OperationDescription *op_desc;
-    TF_Operation *op;
-    TF_Operation *transpose_op;
-    TF_Tensor *tensor;
-    TF_Output input;
-    int32_t *transpose_perm;
-    int64_t transpose_perm_shape[] = {4};
-    int64_t input_shape[] = {1, -1, -1, -1};
-    DNNReturnType layer_add_res;
-    DNNModel *model = NULL;
-    NativeModel *native_model;
-
-    model = ff_dnn_load_model_native(model_filename, NULL, NULL);
-    if (!model){
-        av_log(ctx, AV_LOG_ERROR, "Failed to load native model\n");
-        return DNN_ERROR;
-    }
-
-    native_model = (NativeModel *)model->model;
-    ort_model->graph = TF_NewGraph();
-    ort_model->status = TF_NewStatus();
-
-#define CLEANUP_ON_ERROR(ort_model) \
-    { \
-        TF_DeleteGraph(ort_model->graph); \
-        TF_DeleteStatus(ort_model->status); \
-        av_log(ctx, AV_LOG_ERROR, "Failed to set value or add operator to layer\n"); \
-        return DNN_ERROR; \
-    }
-
-    op_desc = TF_NewOperation(ort_model->graph, "Placeholder", "x");
-    TF_SetAttrType(op_desc, "dtype", TF_FLOAT);
-    TF_SetAttrShape(op_desc, "shape", input_shape, 4);
-    op = TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        CLEANUP_ON_ERROR(ort_model);
-    }
-
-    op_desc = TF_NewOperation(ort_model->graph, "Const", "transpose_perm");
-    TF_SetAttrType(op_desc, "dtype", TF_INT32);
-    tensor = TF_AllocateTensor(TF_INT32, transpose_perm_shape, 1, 4 * sizeof(int32_t));
-    transpose_perm = (int32_t *)TF_TensorData(tensor);
-    transpose_perm[0] = 1;
-    transpose_perm[1] = 2;
-    transpose_perm[2] = 3;
-    transpose_perm[3] = 0;
-    TF_SetAttrTensor(op_desc, "value", tensor, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        CLEANUP_ON_ERROR(ort_model);
-    }
-    transpose_op = TF_FinishOperation(op_desc, ort_model->status);
-
-    for (layer = 0; layer < native_model->layers_num; ++layer){
-        switch (native_model->layers[layer].type){
-        case DLT_INPUT:
-            layer_add_res = DNN_SUCCESS;
-            break;
-        case DLT_CONV2D:
-            layer_add_res = add_conv_layer(ort_model, transpose_op, &op,
-                                           (ConvolutionalParams *)native_model->layers[layer].params, layer);
-            break;
-        case DLT_DEPTH_TO_SPACE:
-            layer_add_res = add_depth_to_space_layer(ort_model, &op,
-                                                     (DepthToSpaceParams *)native_model->layers[layer].params, layer);
-            break;
-        case DLT_MIRROR_PAD:
-            layer_add_res = add_pad_layer(ort_model, &op,
-                                          (LayerPadParams *)native_model->layers[layer].params, layer);
-            break;
-        case DLT_MAXIMUM:
-            layer_add_res = add_maximum_layer(ort_model, &op,
-                                          (DnnLayerMaximumParams *)native_model->layers[layer].params, layer);
-            break;
-        default:
-            CLEANUP_ON_ERROR(ort_model);
-        }
-
-        if (layer_add_res != DNN_SUCCESS){
-            CLEANUP_ON_ERROR(ort_model);
-        }
-    }
-
-    op_desc = TF_NewOperation(ort_model->graph, "Identity", "y");
-    input.oper = op;
-    input.index = 0;
-    TF_AddInput(op_desc, input);
-    TF_FinishOperation(op_desc, ort_model->status);
-    if (TF_GetCode(ort_model->status) != TF_OK){
-        CLEANUP_ON_ERROR(ort_model);
-    }
-
-    ff_dnn_free_model_native(&model);
-
-    return DNN_SUCCESS;
-}
-#endif
-
 DNNModel *ff_dnn_load_model_ort(const char *model_filename,
                                 const char *options, void *userdata)
 {
@@ -928,19 +583,11 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
     }
 
     if (load_ort_model(ort_model, model_filename) != DNN_SUCCESS) {
-#if 1
+        release_ort_context(ort_model);
         av_freep(&ort_model);
         av_freep(&model);
 
         return NULL;
-#else
-        if (load_native_model(ort_model, model_filename) != DNN_SUCCESS) {
-            av_freep(&ort_model);
-            av_freep(&model);
-
-            return NULL;
-        }
-#endif
     }
 
     model->model = (void *)ort_model;
@@ -1090,19 +737,7 @@ void ff_dnn_free_model_ort(DNNModel **model)
 
     if (*model) {
         ort_model = (ORTModel *)(*model)->model;
-        if (ort_model->session) {
-            ort_model->ort->ReleaseSession(ort_model->session);
-        }
-        if (ort_model->options) {
-            ort_model->ort->ReleaseSessionOptions(ort_model->options);
-        }
-        if (ort_model->status) {
-            ort_model->ort->ReleaseStatus(ort_model->status);
-        }
-        if (ort_model->env) {
-            ort_model->ort->ReleaseEnv(ort_model->env);
-        }
-
+        release_ort_context(ort_model);
         av_freep(&ort_model);
         av_freep(model);
     }
