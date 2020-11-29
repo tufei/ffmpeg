@@ -9628,13 +9628,19 @@ need to build and install the OpenVINO for C library (see
 @code{--enable-libopenvino} (--extra-cflags=-I... --extra-ldflags=-L... might
 be needed if the header files and libraries are not installed into system path)
 
+@item onnxruntime
+ONNXRunTime backend. To enable this backend you
+need to install the ONNXRunTime library with C API (see
+@url{https://www.onnxruntime.ai/}) and configure FFmpeg with
+@code{--enable-libonnxruntime}
+
 @end table
 
 Default value is @samp{native}.
 
 @item model
 Set path to model file specifying network architecture and its parameters.
-Note that different backends use different file formats. TensorFlow, OpenVINO and native
+Note that different backends use different file formats. TensorFlow, OpenVINO, ONNX, and native
 backend can load files for only its format.
 
 Native model file (.model) can be generated from TensorFlow model file (.pb) by using tools/python/convert.py
