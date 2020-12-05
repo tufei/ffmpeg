@@ -523,25 +523,40 @@ The filter accepts the following options:
 Set split frequencies. Those must be positive and increasing.
 
 @item order
-Set filter order. Available values are:
+Set filter order for each band split. This controls filter roll-off or steepness
+of filter transfer function.
+Available values are:
 
 @table @samp
 @item 2nd
+12 dB per octave.
 @item 4th
+24 dB per octave.
 @item 6th
+36 dB per octave.
 @item 8th
+48 dB per octave.
 @item 10th
+60 dB per octave.
 @item 12th
+72 dB per octave.
 @item 14th
+84 dB per octave.
 @item 16th
+96 dB per octave.
 @item 18th
+108 dB per octave.
 @item 20th
+120 dB per octave.
 @end table
 
 Default is @var{4th}.
 
 @item level
 Set input gain level. Allowed range is from 0 to 1. Default value is 1.
+
+@item gains
+Set output gain for each band. Default value is 1 for all bands.
 @end table
 
 @subsection Examples
@@ -1478,6 +1493,10 @@ the reduction.
 Default is @code{average}. Can be @code{average} or @code{maximum}.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section aiir
 
 Apply an arbitrary Infinite Impulse Response filter.
@@ -2288,6 +2307,13 @@ This filter accepts the following options:
 @table @option
 @item model, m
 Set train model file to load. This option is always required.
+
+@item mix
+Set how much to mix filtered samples into final output.
+Allowed range is from -1 to 1. Default value is 1.
+Negative values are special, they set how much to keep filtered noise
+in the final filter output. Set this option to -1 to hear actual
+noise removed from input signal.
 @end table
 
 @section asetnsamples
@@ -5081,6 +5107,10 @@ Default is average. Can be average or maximum.
 Set sidechain gain. Default is 1. Range is from 0.015625 to 64.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section silencedetect
 
 Detect silence in an audio stream.
@@ -5476,6 +5506,12 @@ Mid/Side to Left/Left.
 
 @item ms>rr
 Mid/Side to Right/Right.
+
+@item ms>rl
+Mid/Side to Right/Left.
+
+@item lr>l-r
+Left/Right to Left - Right.
 @end table
 
 @item slev
@@ -5524,6 +5560,10 @@ Similar as classic mode above but gain is raised up to 2.
 Equal power distribution, from -6dB to +6dB range.
 @end table
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @subsection Examples
 
