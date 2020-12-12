@@ -164,7 +164,7 @@ static int check_modelinput_inlink(const DNNData *model_input, const AVFilterLin
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUV410P:
     case AV_PIX_FMT_YUV411P:
-        if (model_input->channels != 1) {
+        if (model_input->channels != 1 && model_input->channels != 3) {
             LOG_FORMAT_CHANNEL_MISMATCH();
             return AVERROR(EIO);
         }
@@ -179,7 +179,7 @@ static int check_modelinput_inlink(const DNNData *model_input, const AVFilterLin
 
 static int config_input(AVFilterLink *inlink)
 {
-    AVFilterContext *context     = inlink->dst;
+    AVFilterContext *context  = inlink->dst;
     DnnProcessingContext *ctx = context->priv;
     DNNReturnType result;
     DNNData model_input;

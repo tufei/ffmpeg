@@ -27,7 +27,7 @@ DNNReturnType proc_from_dnn_to_frame(AVFrame *frame, DNNData *output, void *log_
     struct SwsContext *sws_ctx;
     int bytewidth = av_image_get_linesize(frame->format, frame->width, 0);
     if (output->dt != DNN_FLOAT) {
-        av_log(log_ctx, AV_LOG_ERROR, "do not support data type rather than DNN_FLOAT\n");
+        av_log(log_ctx, AV_LOG_ERROR, "do not support data type other than DNN_FLOAT\n");
         return DNN_ERROR;
     }
 
