@@ -48,6 +48,11 @@ version <next>:
 - speechnorm filter
 - SpeedHQ encoder
 - asupercut filter
+- asubcut filter
+- Microsoft Paint (MSP) version 2 decoder
+- Microsoft Paint (MSP) demuxer
+- AV1 monochrome encoding support via libaom >= 2.0.1
+- asuperpass and asuperstop filter
 
 
 version 4.3:

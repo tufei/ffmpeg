@@ -1086,6 +1086,10 @@ no fade applied
 @end table
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @subsection Examples
 
 @itemize
@@ -1419,11 +1423,15 @@ The filter accepts the following options:
 @item shift
 Specify frequency shift. Allowed range is -INT_MAX to INT_MAX.
 Default value is 0.0.
+
+@item level
+Set output gain applied to final output. Allowed range is from 0.0 to 1.0.
+Default value is 1.0.
 @end table
 
 @subsection Commands
 
-This filter supports the above option as @ref{commands}.
+This filter supports the all above options as @ref{commands}.
 
 @section agate
 
@@ -1714,6 +1722,21 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
 @end table
 @end table
 
@@ -2182,11 +2205,15 @@ The filter accepts the following options:
 @item shift
 Specify phase shift. Allowed range is from -1.0 to 1.0.
 Default value is 0.0.
+
+@item level
+Set output gain applied to final output. Allowed range is from 0.0 to 1.0.
+Default value is 1.0.
 @end table
 
 @subsection Commands
 
-This filter supports the above option as @ref{commands}.
+This filter supports the all above options as @ref{commands}.
 
 @section apulsator
 
@@ -2662,6 +2689,32 @@ Default value is 20.
 
 This filter supports the all above options as @ref{commands}.
 
+@section asubcut
+Cut subwoofer frequencies.
+
+This filter allows to set custom, steeper
+roll off than highpass filter, and thus is able to more attenuate
+frequency content in stop-band.
+
+The filter accepts the following options:
+
+@table @option
+@item cutoff
+Set cutoff frequency in Hertz. Allowed range is 2 to 200.
+Default value is 20.
+
+@item order
+Set filter order. Available values are from 3 to 20.
+Default value is 10.
+
+@item level
+Set input gain level. Allowed range is from 0 to 1. Default value is 1.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section asupercut
 Cut super frequencies.
 
@@ -2675,6 +2728,59 @@ Default value is 20000.
 @item order
 Set filter order. Available values are from 3 to 20.
 Default value is 10.
+
+@item level
+Set input gain level. Allowed range is from 0 to 1. Default value is 1.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
+@section asuperpass
+Apply high order Butterworth band-pass filter.
+
+The filter accepts the following options:
+
+@table @option
+@item centerf
+Set center frequency in Hertz. Allowed range is 2 to 999999.
+Default value is 1000.
+
+@item order
+Set filter order. Available values are from 4 to 20.
+Default value is 4.
+
+@item qfactor
+Set Q-factor. Allowed range is from 0.01 to 100. Default value is 1.
+
+@item level
+Set input gain level. Allowed range is from 0 to 2. Default value is 1.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
+@section asuperstop
+Apply high order Butterworth band-stop filter.
+
+The filter accepts the following options:
+
+@table @option
+@item centerf
+Set center frequency in Hertz. Allowed range is 2 to 999999.
+Default value is 1000.
+
+@item order
+Set filter order. Available values are from 4 to 20.
+Default value is 4.
+
+@item qfactor
+Set Q-factor. Allowed range is from 0.01 to 100. Default value is 1.
+
+@item level
+Set input gain level. Allowed range is from 0 to 2. Default value is 1.
 @end table
 
 @subsection Commands
@@ -2881,6 +2987,21 @@ Set transform type of IIR filter.
 @item tdii
 @item latt
 @end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
+@end table
 @end table
 
 @subsection Commands
@@ -2952,6 +3073,21 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
 @end table
 @end table
 
@@ -3032,6 +3168,21 @@ Set transform type of IIR filter.
 @item tdii
 @item latt
 @end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
+@end table
 @end table
 
 @subsection Commands
@@ -3098,6 +3249,21 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
 @end table
 @end table
 
@@ -3831,6 +3997,21 @@ Set transform type of IIR filter.
 @item tdii
 @item latt
 @end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
+@end table
 @end table
 
 @subsection Examples
@@ -4317,6 +4498,21 @@ Set transform type of IIR filter.
 @item tdii
 @item latt
 @end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
+@end table
 @end table
 
 @subsection Commands
@@ -4651,6 +4847,21 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
 @end table
 @end table
 
@@ -5857,6 +6068,21 @@ Set transform type of IIR filter.
 @item dii
 @item tdii
 @item latt
+@end table
+
+@item precision, r
+Set precison of filtering.
+@table @option
+@item auto
+Pick automatic sample format depending on surround filters.
+@item s16
+Always use signed 16-bit.
+@item s32
+Always use signed 32-bit.
+@item f32
+Always use float 32-bit.
+@item f64
+Always use float 64-bit.
 @end table
 @end table
 
@@ -7520,7 +7746,7 @@ The filter accepts the following options:
 @table @option
 @item thres
 Set threshold for averaging chrominance values.
-Sum of absolute difference of U and V pixel components or current
+Sum of absolute difference of Y, U and V pixel components of current
 pixel and neighbour pixels lower than this threshold will be used in
 averaging. Luma component is left unchanged and is copied to output.
 Default value is 30. Allowed range is from 1 to 200.
@@ -7542,6 +7768,24 @@ Mostly useful to speed-up filtering.
 Set vertical step when averaging. Default value is 1.
 Allowed range is from 1 to 50.
 Mostly useful to speed-up filtering.
+
+@item threy
+Set Y threshold for averaging chrominance values.
+Set finer control for max allowed difference between Y components
+of current pixel and neigbour pixels.
+Default value is 200. Allowed range is from 1 to 200.
+
+@item threu
+Set U threshold for averaging chrominance values.
+Set finer control for max allowed difference between U components
+of current pixel and neigbour pixels.
+Default value is 200. Allowed range is from 1 to 200.
+
+@item threv
+Set V threshold for averaging chrominance values.
+Set finer control for max allowed difference between V components
+of current pixel and neigbour pixels.
+Default value is 200. Allowed range is from 1 to 200.
 @end table
 
 @subsection Commands
@@ -8304,6 +8548,10 @@ Set matrix mode for each plane. Can be @var{square}, @var{row} or @var{column}.
 Default is @var{square}.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @subsection Examples
 
 @itemize
@@ -8726,6 +8974,10 @@ The value which the width/height should be divisible by. It defaults to
 16. The offset is automatically adjusted to center the video. Use 2 to
 get only even dimensions (needed for 4:2:2 video). 16 is best when
 encoding to most video codecs.
+
+@item skip
+Set the number of initial frames for which evaluation is skipped.
+Default is 2. Range is 0 to INT_MAX.
 
 @item reset_count, reset
 Set the counter that determines after how many frames cropdetect will
@@ -15709,6 +15961,10 @@ Set value which will be multiplied with filtered result.
 Set value which will be added to filtered result.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section pseudocolor
 
 Alter frame colors in video with pseudocolors.
@@ -16300,6 +16556,10 @@ Set value which will be multiplied with filtered result.
 @item delta
 Set value which will be added to filtered result.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section rotate
 
@@ -17886,6 +18146,10 @@ Set value which will be multiplied with filtered result.
 @item delta
 Set value which will be added to filtered result.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @anchor{spp}
 @section spp
