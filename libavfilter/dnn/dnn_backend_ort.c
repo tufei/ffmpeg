@@ -46,11 +46,13 @@ typedef struct ORTOptions {
     int opt_level;
     int log_verbosity_level;
     int log_severity_level;
+    int enable_cuda;
 } ORTOptions;
 
 typedef struct ORTContext {
     const AVClass *class;
     ORTOptions options;
+    OrtCUDAProviderOptions cuda_options;
 } ORTContext;
 
 typedef struct ORTModel {
@@ -82,7 +84,7 @@ static const AVOption dnn_onnxruntime_options[] = {
     { "intra_op_threads",
       "number of threads within nodes",
       OFFSET(options.intra_op_threads),
-      AV_OPT_TYPE_INT, { .i64 = 1 }, 0, INT_MAX, FLAGS },
+      AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, FLAGS },
     { "inter_op_threads",
       "number of threads across nodes",
       OFFSET(options.inter_op_threads),
@@ -95,7 +97,7 @@ static const AVOption dnn_onnxruntime_options[] = {
     { "opt_level",
       "graph optimization level",
       OFFSET(options.opt_level),
-      AV_OPT_TYPE_INT, { .i64 = ORT_ENABLE_BASIC },
+      AV_OPT_TYPE_INT, { .i64 = ORT_ENABLE_ALL },
       ORT_DISABLE_ALL, ORT_ENABLE_ALL, FLAGS },
     { "log_verbosity_level",
       "logging verbosity level",
@@ -107,6 +109,10 @@ static const AVOption dnn_onnxruntime_options[] = {
       OFFSET(options.log_severity_level),
       AV_OPT_TYPE_INT, { .i64 = ORT_LOGGING_LEVEL_ERROR },
       ORT_LOGGING_LEVEL_VERBOSE, ORT_LOGGING_LEVEL_FATAL, FLAGS },
+    { "enable_cuda",
+      "enable CUDA execution provider when using ONNXRunTime_GPU",
+      OFFSET(options.enable_cuda),
+      AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, FLAGS },
     { NULL }
 };
 
@@ -450,6 +456,16 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         return DNN_ERROR;
     }
 
+    if (ORT_SEQUENTIAL == ctx->options.execute_mode) {
+        *status = ort->EnableMemPattern(ort_model->options);
+        if (*status) {
+            av_log(ctx, AV_LOG_ERROR, "EnableMemPattern(): %s\n",
+                   ort->GetErrorMessage(*status));
+            ort->ReleaseStatus(*status);
+            return DNN_ERROR;
+        }
+    }
+
     if (ctx->options.profile_file_prefix) {
         *status = ort->EnableProfiling(ort_model->options,
                                        ctx->options.profile_file_prefix);
@@ -474,6 +490,22 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
                                        ctx->options.logger_id);
         if (*status) {
             av_log(ctx, AV_LOG_ERROR, "SetSessionLogId(): %s\n",
+                   ort->GetErrorMessage(*status));
+            ort->ReleaseStatus(*status);
+            return DNN_ERROR;
+        }
+    }
+
+    if (ctx->options.enable_cuda) {
+        memset(&ctx->cuda_options, 0, sizeof(OrtCUDAProviderOptions));
+        ctx->cuda_options.cudnn_conv_algo_search = DEFAULT;
+        ctx->cuda_options.cuda_mem_limit = -1UL;
+
+        *status =
+            ort->SessionOptionsAppendExecutionProvider_CUDA(ort_model->options,
+                                                            &ctx->cuda_options);
+        if (*status) {
+            av_log(ctx, AV_LOG_ERROR, "SessionOptionsAppendExecutionProvider_CUDA(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
             return DNN_ERROR;
