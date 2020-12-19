@@ -2454,6 +2454,12 @@ It accepts the following values:
 @item erf
 @end table
 
+@item threshold
+Set threshold from where to start clipping. Default value is 0dB or 1.
+
+@item output
+Set gain applied to output. Default value is 0dB or 1.
+
 @item param
 Set additional parameter which controls sigmoid function.
 
@@ -3148,6 +3154,9 @@ kHz
 
 @item width, w
 Determine how steep is the filter's shelf transition.
+
+@item poles, p
+Set number of poles. Default is 2.
 
 @item mix, m
 How much to use filtered signal in output. Default is 1.
@@ -6049,6 +6058,9 @@ kHz
 
 @item width, w
 Determine how steep is the filter's shelf transition.
+
+@item poles, p
+Set number of poles. Default is 2.
 
 @item mix, m
 How much to use filtered signal in output. Default is 1.
@@ -11750,16 +11762,25 @@ It accepts the following values:
 fill pixels using outermost pixels
 
 @item mirror
-fill pixels using mirroring
+fill pixels using mirroring (half sample symmetric)
 
 @item fixed
 fill pixels with constant value
+
+@item reflect
+fill pixels using reflecting (whole sample symmetric)
+
+@item wrap
+fill pixels using wrapping
+
+@item fade
+fade pixels to constant value
 @end table
 
 Default is @var{smear}.
 
 @item color
-Set color for pixels in fixed mode. Default is @var{black}.
+Set color for pixels in fixed or fade mode. Default is @var{black}.
 @end table
 
 @subsection Commands
@@ -13556,6 +13577,10 @@ Upper bound. Defaults to the highest allowed value for the input.
 @item planes
 Specify which planes will be processed. Defaults to all available.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section loop
 
