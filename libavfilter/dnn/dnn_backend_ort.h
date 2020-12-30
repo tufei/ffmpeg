@@ -30,7 +30,7 @@
 #include "../dnn_interface.h"
 
 DNNModel *ff_dnn_load_model_ort(const char *model_filename,
-                                const char *options, void *userdata);
+                                const char *options, AVFilterContext *filter_ctx);
 
 DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
                                        const char *input_name,

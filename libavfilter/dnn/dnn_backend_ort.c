@@ -586,7 +586,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
 }
 
 DNNModel *ff_dnn_load_model_ort(const char *model_filename,
-                                const char *options, void *userdata)
+                                const char *options, AVFilterContext *filter_ctx)
 {
     DNNModel *model = NULL;
     ORTModel *ort_model = NULL;
@@ -626,7 +626,7 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
     model->get_input = &get_input_ort;
     model->get_output = &get_output_ort;
     model->options = options;
-    model->userdata = userdata;
+    model->filter_ctx = filter_ctx;
 
     return model;
 }
@@ -671,7 +671,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
     if (do_ioproc) {
         if (ort_model->model->pre_proc != NULL) {
             ort_model->model->pre_proc(in_frame, &input,
-                                       ort_model->model->userdata);
+                                       ort_model->model->filter_ctx);
         } else {
             proc_from_frame_to_dnn(in_frame, &input, ctx);
         }
@@ -724,7 +724,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
     if (do_ioproc) {
         if (ort_model->model->post_proc != NULL) {
             ort_model->model->post_proc(out_frame, &output,
-                                        ort_model->model->userdata);
+                                        ort_model->model->filter_ctx);
         } else {
             proc_from_dnn_to_frame(out_frame, &output, ctx);
         }
