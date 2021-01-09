@@ -410,6 +410,13 @@ for live / endless streams.
 @item reconnect_streamed
 If set then even streamed/non seekable streams will be reconnected on errors.
 
+@item reconnect_on_network_error
+Reconnect automatically in case of TCP/TLS errors during connect.
+
+@item reconnect_on_http_error
+A comma separated list of HTTP status codes to reconnect on. The list can
+include specific status codes (e.g. '503') or the strings '4xx' / '5xx'.
+
 @item reconnect_delay_max
 Sets the maximum delay in seconds after which to give up reconnecting
 
@@ -1645,8 +1652,9 @@ tcp://@var{hostname}:@var{port}[?@var{options}]
 The list of supported options follows.
 
 @table @option
-@item listen=@var{1|0}
-Listen for an incoming connection. Default value is 0.
+@item listen=@var{2|1|0}
+Listen for an incoming connection. 0 disables listen, 1 enables listen in
+single client mode, 2 enables listen in multi-client mode. Default value is 0.
 
 @item timeout=@var{microseconds}
 Set raise error timeout, expressed in microseconds.
