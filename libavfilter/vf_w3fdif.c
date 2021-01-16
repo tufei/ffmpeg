@@ -85,6 +85,7 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YUVA420P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA444P,
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP,
         AV_PIX_FMT_GRAY8,
+        AV_PIX_FMT_GRAY9, AV_PIX_FMT_GRAY10, AV_PIX_FMT_GRAY12, AV_PIX_FMT_GRAY14, AV_PIX_FMT_GRAY16,
         AV_PIX_FMT_YUV420P9, AV_PIX_FMT_YUV422P9, AV_PIX_FMT_YUV444P9,
         AV_PIX_FMT_YUV420P10, AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV444P10,
         AV_PIX_FMT_YUV420P12, AV_PIX_FMT_YUV422P12, AV_PIX_FMT_YUV444P12,
@@ -381,7 +382,9 @@ static int deinterlace_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     const int start = (height * jobnr) / nb_jobs;
     const int end = (height * (jobnr+1)) / nb_jobs;
     const int max = s->max;
-    const int tff = (s->field == (s->parity == -1 ? cur->top_field_first == cur->interlaced_frame : s->parity == 0 ? !cur->interlaced_frame : cur->interlaced_frame));
+    const int interlaced = cur->interlaced_frame;
+    const int tff = s->field == (s->parity == -1 ? interlaced ? cur->top_field_first : 1 :
+                                 s->parity ^ 1);
     int j, y_in, y_out;
 
     /* copy unchanged the lines of the field */
