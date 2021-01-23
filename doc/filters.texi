@@ -7096,6 +7096,15 @@ Alternatively can be set to @code{s} serial.
 Parallel can be faster then serial, while other way around is never true.
 Parallel will abort early on first change being greater then thresholds, while serial
 will continue processing other side of frames if they are equal or below thresholds.
+
+@item 0s
+@item 1s
+@item 2s
+Set sigma for 1st plane, 2nd plane or 3rd plane. Default is 32767.
+Valid range is from 0 to 32767.
+This options controls weight for each pixel in radius defined by size.
+Default value means every pixel have same weight.
+Setting this option to 0 effectively disables filtering.
 @end table
 
 @subsection Commands
@@ -7143,6 +7152,10 @@ The filter accepts the following option:
 @item min_val
 Set the minimal luminance value. Default is @code{16}.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section bilateral
 Apply bilateral filter, spatial smoothing while preserving edges.
@@ -9203,6 +9216,9 @@ Set background opacity.
 
 @item format
 Set display number format. Can be @code{hex}, or @code{dec}. Default is @code{hex}.
+
+@item components
+Set pixel components to display. By default all pixel components are displayed.
 @end table
 
 @section dblur
@@ -11130,6 +11146,19 @@ Allowed range is from 1 to 15.
 @item redge
 Specify the search radius for best edge matching. Default value is 2.
 Allowed range is from 0 to 15.
+
+@item interp
+Specify the interpolation used. Default is 4-point interpolation. It accepts one
+of the following values:
+
+@table @option
+@item 2p
+Two-point interpolation.
+@item 4p
+Four-point interpolation.
+@item 6p
+Six-point interpolation.
+@end table
 @end table
 
 @subsection Commands
@@ -14091,6 +14120,10 @@ copied from first stream.
 By default value 0xf, all planes will be processed.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section maskedmin
 
 Merge the second and third input stream into output stream using absolute differences
@@ -14644,9 +14677,9 @@ Set which set of weights to use in the predictor.
 Can be one of the following:
 
 @table @samp
-@item a
+@item a, abs
 weights trained to minimize absolute error
-@item s
+@item s, mse
 weights trained to minimize squared error
 @end table
 
@@ -14668,13 +14701,15 @@ Can be one of the following:
 @item none
 @item original
 @item new
+@item new2
+@item new3
 @end table
 
 Default is @code{new}.
-
-@item fapprox
-Set various debugging flags.
 @end table
+
+@subsection Commands
+This filter supports same @ref{commands} as options, excluding @var{weights} option.
 
 @section noformat
 
@@ -15782,6 +15817,10 @@ Both capture and transfer unknown or varying.
 Filter selects among @samp{t}, @samp{b} and @samp{p} using image analysis only.
 @end table
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section photosensitivity
 Reduce various flashes in video, so to help users with epilepsy.

@@ -36,7 +36,7 @@ static const AVOption dnn_native_options[] = {
     { NULL },
 };
 
-const AVClass dnn_native_class = {
+static const AVClass dnn_native_class = {
     .class_name = "dnn_native",
     .item_name  = av_default_item_name,
     .option     = dnn_native_options,
@@ -208,7 +208,7 @@ DNNModel *ff_dnn_load_model_native(const char *model_filename, const char *optio
         }
 
         native_model->layers[layer].type = layer_type;
-        parsed_size = layer_funcs[layer_type].pf_load(&native_model->layers[layer], model_file_context, file_size, native_model->operands_num);
+        parsed_size = ff_layer_funcs[layer_type].pf_load(&native_model->layers[layer], model_file_context, file_size, native_model->operands_num);
         if (!parsed_size) {
             goto fail;
         }
@@ -300,7 +300,7 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
     oprd->dims[2] = in_frame->width;
 
     av_freep(&oprd->data);
-    oprd->length = calculate_operand_data_length(oprd);
+    oprd->length = ff_calculate_operand_data_length(oprd);
     if (oprd->length <= 0) {
         av_log(ctx, AV_LOG_ERROR, "The input data length overflow\n");
         return DNN_ERROR;
@@ -320,20 +320,20 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
         if (native_model->model->pre_proc != NULL) {
             native_model->model->pre_proc(in_frame, &input, native_model->model->filter_ctx);
         } else {
-            proc_from_frame_to_dnn(in_frame, &input, ctx);
+            ff_proc_from_frame_to_dnn(in_frame, &input, ctx);
         }
     }
 
     if (nb_output != 1) {
         // currently, the filter does not need multiple outputs,
         // so we just pending the support until we really need it.
-        av_log(ctx, AV_LOG_ERROR, "do not support multiple outputs\n");
+        avpriv_report_missing_feature(ctx, "multiple outputs");
         return DNN_ERROR;
     }
 
     for (layer = 0; layer < native_model->layers_num; ++layer){
         DNNLayerType layer_type = native_model->layers[layer].type;
-        if (layer_funcs[layer_type].pf_exec(native_model->operands,
+        if (ff_layer_funcs[layer_type].pf_exec(native_model->operands,
                                             native_model->layers[layer].input_operand_indexes,
                                             native_model->layers[layer].output_operand_index,
                                             native_model->layers[layer].params,
@@ -368,7 +368,7 @@ static DNNReturnType execute_model_native(const DNNModel *model, const char *inp
             if (native_model->model->post_proc != NULL) {
                 native_model->model->post_proc(out_frame, &output, native_model->model->filter_ctx);
             } else {
-                proc_from_dnn_to_frame(out_frame, &output, ctx);
+                ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
             }
         } else {
             out_frame->width = output.width;
@@ -398,7 +398,7 @@ DNNReturnType ff_dnn_execute_model_native(const DNNModel *model, const char *inp
     return execute_model_native(model, input_name, in_frame, output_names, nb_output, out_frame, 1);
 }
 
-int32_t calculate_operand_dims_count(const DnnOperand *oprd)
+int32_t ff_calculate_operand_dims_count(const DnnOperand *oprd)
 {
     int32_t result = 1;
     for (int i = 0; i < 4; ++i)
@@ -407,7 +407,7 @@ int32_t calculate_operand_dims_count(const DnnOperand *oprd)
     return result;
 }
 
-int32_t calculate_operand_data_length(const DnnOperand* oprd)
+int32_t ff_calculate_operand_data_length(const DnnOperand* oprd)
 {
     // currently, we just support DNN_FLOAT
     uint64_t len = sizeof(float);
