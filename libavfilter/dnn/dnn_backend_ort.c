@@ -673,7 +673,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
             ort_model->model->pre_proc(in_frame, &input,
                                        ort_model->model->filter_ctx);
         } else {
-            proc_from_frame_to_dnn(in_frame, &input, ctx);
+            ff_proc_from_frame_to_dnn(in_frame, &input, ctx);
         }
     }
 
@@ -726,7 +726,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
             ort_model->model->post_proc(out_frame, &output,
                                         ort_model->model->filter_ctx);
         } else {
-            proc_from_dnn_to_frame(out_frame, &output, ctx);
+            ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
         }
     } else {
         out_frame->width = output.width;
