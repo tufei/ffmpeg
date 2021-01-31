@@ -640,6 +640,10 @@ Set LFO range.
 Set LFO rate.
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section acue
 
 Delay audio filtering until a given wallclock timestamp. See the @ref{cue}
@@ -8065,6 +8069,10 @@ Adjust contribution of input red, green, blue and alpha channels for output alph
 Default is @code{1} for @var{aa}, and @code{0} for @var{ar}, @var{ag} and @var{ab}.
 
 Allowed ranges for options are @code{[-2.0, 2.0]}.
+
+@item pl
+Preserve lightness when changing colors. Allowed range is from @code{[0.0, 1.0]}.
+Default is @code{0.0}, thus disabled.
 @end table
 
 @subsection Examples
@@ -8545,6 +8553,28 @@ For example to convert the input to SMPTE-240M, use the command:
 @example
 colorspace=smpte240m
 @end example
+
+@section colortemperature
+Adjust color temperature in video to simulate variations in ambient color temperature.
+
+The filter accepts the following options:
+
+@table @option
+@item temperature
+Set the temperature in Kelvin. Allowed range is from 1000 to 40000.
+Default value is 6500 K.
+
+@item mix
+Set mixing with filtered output. Allowed range is from 0 to 1.
+Default value is 1.
+
+@item pl
+Set the amount of preserving lightness. Allowed range is from 0 to 1.
+Default value is 0.
+@end table
+
+@subsection Commands
+This filter supports same @ref{commands} as options.
 
 @section convolution
 
@@ -10944,6 +10974,18 @@ Can be either @var{normal} or @var{diff}. Default is @var{normal}.
 
 @var{diff} mode measures entropy of histogram delta values, absolute differences
 between neighbour histogram values.
+@end table
+
+@section epx
+Apply the EPX magnification filter which is designed for pixel art.
+
+It accepts the following option:
+
+@table @option
+@item n
+Set the scaling dimension: @code{2} for @code{2xEPX}, @code{3} for
+@code{3xEPX}.
+Default is @code{3}.
 @end table
 
 @section eq
@@ -13390,6 +13432,27 @@ kerndeint=map=1
 @end example
 @end itemize
 
+@section kirsch
+Apply kirsch operator to input video stream.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set which planes will be processed, unprocessed planes will be copied.
+By default value 0xf, all planes will be processed.
+
+@item scale
+Set value which will be multiplied with filtered result.
+
+@item delta
+Set value which will be added to filtered result.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @section lagfun
 
 Slowly update darker pixels.
@@ -13404,6 +13467,10 @@ Set factor for decaying. Default is .95. Allowed range is from 0 to 1.
 @item planes
 Set which planes to filter. Default is all. Allowed range is from 0 to 15.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section lenscorrection
 
@@ -13443,6 +13510,13 @@ no correction. Default is 0.
 @item k2
 Coefficient of the double quadratic correction term. This value has a range [-1,1].
 0 means no correction. Default is 0.
+@item i
+Set interpolation type. Can be @code{nearest} or @code{bilinear}.
+Default is @code{nearest}.
+@item fc
+Specify the color of the unmapped pixels. For the syntax of this option,
+check the @ref{color syntax,,"Color" section in the ffmpeg-utils
+manual,ffmpeg-utils}. Default color is @code{black@@0}.
 @end table
 
 The formula that generates the correction is:
@@ -13451,6 +13525,10 @@ The formula that generates the correction is:
 
 where @var{r_0} is halve of the image diagonal and @var{r_src} and @var{r_tgt} are the
 distances from the focal point in the source and target images, respectively.
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section lensfun
 
@@ -13802,6 +13880,10 @@ Use values from the nearest defined point.
 Interpolate values using the 8 points defining a cube.
 @item tetrahedral
 Interpolate values using a tetrahedron.
+@item pyramid
+Interpolate values using a pyramid.
+@item prism
+Interpolate values using a prism.
 @end table
 @end table
 
@@ -16144,6 +16226,22 @@ set pixel fourth component expression, corresponds to the alpha component
 
 @item i
 set component to use as base for altering colors
+
+@item p
+Pick one of built-in LUTs. By default is set to none.
+
+Available LUTs:
+@table @samp
+@item magma
+@item inferno
+@item plasma
+@item viridis
+@item turbo
+@item cividis
+@item range1
+@item range2
+@end table
+
 @end table
 
 Each of them specifies the expression to use for computing the lookup table for
@@ -16167,6 +16265,10 @@ The maximum allowed component value.
 @end table
 
 All expressions default to "val".
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @subsection Examples
 
@@ -17801,6 +17903,37 @@ Keep the same colorspace property (default).
 @item ictcp
 @end table
 @end table
+
+@section shear
+Apply shear transform to input video.
+
+This filter supports the following options:
+
+@table @option
+@item shx
+Shear factor in X-direction. Default value is 0.
+Allowed range is from -2 to 2.
+
+@item shy
+Shear factor in Y-direction. Default value is 0.
+Allowed range is from -2 to 2.
+
+@item fillcolor, c
+Set the color used to fill the output area not covered by the transformed
+video. For the general syntax of this option, check the
+@ref{color syntax,,"Color" section in the ffmpeg-utils manual,ffmpeg-utils}.
+If the special value "none" is selected then no
+background is printed (useful for example if the background is never shown).
+
+Default value is "black".
+
+@item interp
+Set interpolation type. Can be @code{bilinear} or @code{nearest}. Default is @code{bilinear}.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section showinfo
 

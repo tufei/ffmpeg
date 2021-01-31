@@ -56,6 +56,11 @@ version <next>:
 - shufflepixels filter
 - tmidequalizer filter
 - estdif filter
+- epx filter
+- Dolby E parser
+- shear filter
+- kirsch filter
+- colortemperature filter
 
 
 version 4.3:
