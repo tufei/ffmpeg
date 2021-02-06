@@ -1879,6 +1879,11 @@ stream ends. The default value is 2 seconds.
 @item weights
 Specify weight of each input audio stream as sequence.
 Each weight is separated by space. By default all inputs have same weight.
+
+@item sum
+Do not scale inputs but instead do only summation of samples.
+Beware of heavy clipping if inputs are not normalized prior of filtering
+or output from @var{amix} normalized after filtering. By default is disabled.
 @end table
 
 @subsection Commands
@@ -1886,6 +1891,7 @@ Each weight is separated by space. By default all inputs have same weight.
 This filter supports the following commands:
 @table @option
 @item weights
+@item sum
 Syntax is same as option with same name.
 @end table
 
@@ -2346,6 +2352,10 @@ Negative values are special, they set how much to keep filtered noise
 in the final filter output. Set this option to -1 to hear actual
 noise removed from input signal.
 @end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @section asetnsamples
 
@@ -7449,6 +7459,9 @@ tblend=all_mode=grainextract
 @end example
 @end itemize
 
+@subsection Commands
+This filter supports same @ref{commands} as options.
+
 @section bm3d
 
 Denoise frames using Block-Matching 3D algorithm.
@@ -8021,6 +8034,69 @@ Add red color cast to shadows:
 colorbalance=rs=.3
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
+@section colorcontrast
+
+Adjust color contrast between RGB components.
+
+The filter accepts the following options:
+
+@table @option
+@item rc
+Set the red-cyan contrast. Defaults is 0.0. Allowed range is from -1.0 to 1.0.
+
+@item gm
+Set the green-magenta contrast. Defaults is 0.0. Allowed range is from -1.0 to 1.0.
+
+@item by
+Set the blue-yellow contrast. Defaults is 0.0. Allowed range is from -1.0 to 1.0.
+
+@item rcw
+@item gmw
+@item byw
+Set the weight of each @code{rc}, @code{gm}, @code{by} option value. Default value is 0.0.
+Allowed range is from 0.0 to 1.0. If all weights are 0.0 filtering is disabled.
+
+@item pl
+Set the amount of preserving lightness. Default value is 0.0. Allowed range is from 0.0 to 1.0.
+@end table
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
+@section colorcorrect
+
+Adjust color white balance selectively for blacks and whites.
+This filter operates in YUV colorspace.
+
+The filter accepts the following options:
+
+@table @option
+@item rl
+Set the red shadow spot. Allowed range is from -1.0 to 1.0.
+Default value is 0.
+
+@item bl
+Set the blue shadow spot. Allowed range is from -1.0 to 1.0.
+Default value is 0.
+
+@item rh
+Set the red highlight spot. Allowed range is from -1.0 to 1.0.
+Default value is 0.
+
+@item bh
+Set the red highlight spot. Allowed range is from -1.0 to 1.0.
+Default value is 0.
+
+@item saturation
+Set the amount of saturation. Allowed range is from -3.0 to 3.0.
+Default value is 1.
+@end table
 
 @subsection Commands
 
@@ -9441,6 +9517,10 @@ Similar as above, but filter only second and third plane.
 deblock=filter=strong:block=4:alpha=0.12:beta=0.07:gamma=0.06:delta=0.05:planes=6
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
 
 @anchor{decimate}
 @section decimate
@@ -13844,6 +13924,10 @@ Interpolate values using the spline interpolation.
 @end table
 @end table
 
+@subsection Commands
+
+This filter supports the all above options as @ref{commands}.
+
 @anchor{lut3d}
 @section lut3d
 
@@ -14593,6 +14677,15 @@ The duration of the shortest input.
 @item first
 The duration of the first input.
 @end table
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item weights
+@item scale
+Syntax is same as option with same name.
 @end table
 
 @section mpdecimate
@@ -19630,6 +19723,15 @@ Similar as above but only showing temporal differences:
 tmix=frames=3:weights="-1 2 -1":scale=1
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item weights
+@item scale
+Syntax is same as option with same name.
+@end table
 
 @anchor{tonemap}
 @section tonemap

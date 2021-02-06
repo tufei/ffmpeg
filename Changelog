@@ -61,6 +61,12 @@ version <next>:
 - shear filter
 - kirsch filter
 - colortemperature filter
+- colorcontrast filter
+- PFM encoder
+- colorcorrect filter
+- binka demuxer
+- XBM parser
+- xbm_pipe demuxer
 
 
 version 4.3:
