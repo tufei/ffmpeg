@@ -586,6 +586,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
 }
 
 DNNModel *ff_dnn_load_model_ort(const char *model_filename,
+                                DNNFunctionType func_type,
                                 const char *options, AVFilterContext *filter_ctx)
 {
     DNNModel *model = NULL;
@@ -627,6 +628,7 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
     model->get_output = &get_output_ort;
     model->options = options;
     model->filter_ctx = filter_ctx;
+    model->func_type = func_type;
 
     return model;
 }
@@ -673,7 +675,8 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
             ort_model->model->pre_proc(in_frame, &input,
                                        ort_model->model->filter_ctx);
         } else {
-            ff_proc_from_frame_to_dnn(in_frame, &input, ctx);
+            ff_proc_from_frame_to_dnn(in_frame, &input,
+                                      ort_model->model->func_type, ctx);
         }
     }
 

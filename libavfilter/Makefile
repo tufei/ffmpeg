@@ -27,6 +27,7 @@ OBJS-$(HAVE_THREADS)                         += pthread.o
 # subsystems
 OBJS-$(CONFIG_QSVVPP)                        += qsvvpp.o
 OBJS-$(CONFIG_SCENE_SAD)                     += scene_sad.o
+OBJS-$(CONFIG_DNN)                           += dnn_filter_common.o
 include $(SRC_PATH)/libavfilter/dnn/Makefile
 
 # audio filters
@@ -470,6 +471,7 @@ OBJS-$(CONFIG_VFRDET_FILTER)                 += vf_vfrdet.o
 OBJS-$(CONFIG_VIBRANCE_FILTER)               += vf_vibrance.o
 OBJS-$(CONFIG_VIDSTABDETECT_FILTER)          += vidstabutils.o vf_vidstabdetect.o
 OBJS-$(CONFIG_VIDSTABTRANSFORM_FILTER)       += vidstabutils.o vf_vidstabtransform.o
+OBJS-$(CONFIG_VIF_FILTER)                    += vf_vif.o framesync.o
 OBJS-$(CONFIG_VIGNETTE_FILTER)               += vf_vignette.o
 OBJS-$(CONFIG_VMAFMOTION_FILTER)             += vf_vmafmotion.o framesync.o
 OBJS-$(CONFIG_VPP_QSV_FILTER)                += vf_vpp_qsv.o

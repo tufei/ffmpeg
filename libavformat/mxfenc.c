@@ -752,7 +752,7 @@ static void store_version(AVFormatContext *s){
     avio_wb16(pb, 0); // release
 }
 
-#define PLATFROM_IDENT "Lavf " AV_STRINGIFY((OS_NAME))
+#define PLATFORM_IDENT "Lavf " AV_STRINGIFY((OS_NAME))
 static void mxf_write_identification(AVFormatContext *s)
 {
     MXFContext *mxf = s->priv_data;
@@ -762,16 +762,15 @@ static void mxf_write_identification(AVFormatContext *s)
     AVDictionaryEntry *version_entry = av_dict_get(s->metadata, "product_version", NULL, 0);
     const char *company = com_entry ? com_entry->value : "FFmpeg";
     const char *product = product_entry ? product_entry->value : s->oformat != &ff_mxf_opatom_muxer ? "OP1a Muxer" : "OPAtom Muxer";
-    const char *product_version = version_entry ? version_entry->value : AV_STRINGIFY(LIBAVFORMAT_VERSION);
-    const char *platform = s->flags & AVFMT_FLAG_BITEXACT ? "Lavf" : PLATFROM_IDENT;
-    const char *version;
+    const char *platform = s->flags & AVFMT_FLAG_BITEXACT ? "Lavf" : PLATFORM_IDENT;
+    const char *version = version_entry ? version_entry->value :
+                              s->flags & AVFMT_FLAG_BITEXACT ? "0.0.0" :
+                                  AV_STRINGIFY(LIBAVFORMAT_VERSION);
     int length;
 
     mxf_write_metadata_key(pb, 0x013000);
     PRINT_KEY(s, "identification key", pb->buf_ptr - 16);
 
-    version = s->flags & AVFMT_FLAG_BITEXACT ?
-        "0.0.0" : product_version;
     length = 100 +mxf_utf16_local_tag_length(company) +
                   mxf_utf16_local_tag_length(product) +
                   mxf_utf16_local_tag_length(platform) +
@@ -2020,7 +2019,6 @@ static int mxf_parse_prores_frame(AVFormatContext *s, AVStream *st, AVPacket *pk
     if (mxf->header_written)
         return 1;
 
-    sc->codec_ul = NULL;
     profile = st->codecpar->profile;
     for (i = 0; i < FF_ARRAY_ELEMS(mxf_prores_codec_uls); i++) {
         if (profile == mxf_prores_codec_uls[i].profile) {
@@ -2028,7 +2026,7 @@ static int mxf_parse_prores_frame(AVFormatContext *s, AVStream *st, AVPacket *pk
             break;
         }
     }
-    if (!sc->codec_ul)
+    if (i == FF_ARRAY_ELEMS(mxf_prores_codec_uls))
         return 0;
 
     sc->frame_size = pkt->size;
@@ -2074,7 +2072,6 @@ static int mxf_parse_dnxhd_frame(AVFormatContext *s, AVStream *st, AVPacket *pkt
     if (pkt->size < 43)
         return 0;
 
-    sc->codec_ul = NULL;
     cid = AV_RB32(pkt->data + 0x28);
     for (i = 0; i < FF_ARRAY_ELEMS(mxf_dnxhd_codec_uls); i++) {
         if (cid == mxf_dnxhd_codec_uls[i].cid) {
@@ -2082,7 +2079,7 @@ static int mxf_parse_dnxhd_frame(AVFormatContext *s, AVStream *st, AVPacket *pkt
             break;
         }
     }
-    if (!sc->codec_ul)
+    if (i == FF_ARRAY_ELEMS(mxf_dnxhd_codec_uls))
         return 0;
 
     sc->component_depth = 0;
@@ -2245,6 +2242,7 @@ static int mxf_parse_h264_frame(AVFormatContext *s, AVStream *st,
     const uint8_t *buf = pkt->data;
     const uint8_t *buf_end = pkt->data + pkt->size;
     const uint8_t *nal_end;
+    const UID *codec_ul = NULL;
     uint32_t state = -1;
     int extra_size = 512; // support AVC Intra files without SPS/PPS header
     int i, frame_size, slice_type, has_sps = 0, intra_only = 0, ret;
@@ -2315,12 +2313,11 @@ static int mxf_parse_h264_frame(AVFormatContext *s, AVStream *st,
 
     if (!has_sps)
         sc->interlaced = st->codecpar->field_order != AV_FIELD_PROGRESSIVE ? 1 : 0;
-    sc->codec_ul = NULL;
     frame_size = pkt->size + extra_size;
 
     for (i = 0; i < FF_ARRAY_ELEMS(mxf_h264_codec_uls); i++) {
         if (frame_size == mxf_h264_codec_uls[i].frame_size && sc->interlaced == mxf_h264_codec_uls[i].interlaced) {
-            sc->codec_ul = &mxf_h264_codec_uls[i].uid;
+            codec_ul = &mxf_h264_codec_uls[i].uid;
             sc->component_depth = 10; // AVC Intra is always 10 Bit
             sc->aspect_ratio = (AVRational){ 16, 9 }; // 16:9 is mandatory for broadcast HD
             st->codecpar->profile = mxf_h264_codec_uls[i].profile;
@@ -2334,17 +2331,18 @@ static int mxf_parse_h264_frame(AVFormatContext *s, AVStream *st,
                    mxf_h264_codec_uls[i].profile == sps->profile_idc &&
                    (mxf_h264_codec_uls[i].intra_only < 0 ||
                     mxf_h264_codec_uls[i].intra_only == intra_only)) {
-            sc->codec_ul = &mxf_h264_codec_uls[i].uid;
+            codec_ul = &mxf_h264_codec_uls[i].uid;
             st->codecpar->profile = sps->profile_idc;
             st->codecpar->level = sps->level_idc;
             // continue to check for avc intra
         }
     }
 
-    if (!sc->codec_ul) {
+    if (!codec_ul) {
         av_log(s, AV_LOG_ERROR, "h264 profile not supported\n");
         return 0;
     }
+    sc->codec_ul = codec_ul;
 
     return 1;
 }
@@ -2441,9 +2439,13 @@ static int mxf_parse_mpeg2_frame(AVFormatContext *s, AVStream *st,
             }
         }
     }
-    if (s->oformat != &ff_mxf_d10_muxer)
-        sc->codec_ul = mxf_get_mpeg2_codec_ul(st->codecpar);
-    return !!sc->codec_ul;
+    if (s->oformat != &ff_mxf_d10_muxer) {
+        const UID *codec_ul = mxf_get_mpeg2_codec_ul(st->codecpar);
+        if (!codec_ul)
+            return 0;
+        sc->codec_ul = codec_ul;
+    }
+    return 1;
 }
 
 static uint64_t mxf_parse_timestamp(int64_t timestamp64)
@@ -2884,6 +2886,13 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
     MXFStreamContext *sc = st->priv_data;
     MXFIndexEntry ie = {0};
     int err;
+
+    if (!mxf->header_written && pkt->stream_index != 0 &&
+        s->oformat != &ff_mxf_opatom_muxer) {
+        av_log(s, AV_LOG_ERROR, "Received non-video packet before "
+                                "header has been written\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     if (!mxf->cbr_index && !mxf->edit_unit_byte_count && !(mxf->edit_units_count % EDIT_UNITS_PER_BODY)) {
         if ((err = av_reallocp_array(&mxf->index_entries, mxf->edit_units_count
