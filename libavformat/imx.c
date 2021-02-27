@@ -25,13 +25,13 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avassert.h"
 #include "libavutil/internal.h"
-#include "argo_asf.h"
 
 #define IMX_TAG MKTAG('I', 'M', 'A', 'X')
 
 typedef struct SimbiosisIMXDemuxContext {
     uint8_t pal[AVPALETTE_SIZE];
     int pal_changed;
+    int64_t first_video_packet_pos;
 } SimbiosisIMXDemuxContext;
 
 static int simbiosis_imx_probe(const AVProbeData *p)
@@ -66,6 +66,7 @@ static int simbiosis_imx_read_header(AVFormatContext *s)
     vst->codecpar->format     = AV_PIX_FMT_PAL8;
     vst->codecpar->codec_id   = AV_CODEC_ID_SIMBIOSIS_IMX;
     vst->start_time = 0;
+    vst->duration =
     vst->nb_frames = avio_rl32(pb);
     rate = avio_rl16(pb);
     avio_skip(pb, 12);
@@ -108,6 +109,8 @@ retry:
         break;
     case 0xAA97:
         idx = 0;
+        if (!imx->first_video_packet_pos)
+            imx->first_video_packet_pos = pos;
         break;
     case 0xAA98:
         for (int i = 0; i < chunk_size / 3; i++) {
@@ -138,6 +141,9 @@ retry:
             return AVERROR(ENOMEM);
         memcpy(pal, imx->pal, AVPALETTE_SIZE);
         imx->pal_changed = 0;
+        if (pos <= imx->first_video_packet_pos)
+            pkt->flags |= AV_PKT_FLAG_KEY;
+    } else if (idx == 1) {
         pkt->flags |= AV_PKT_FLAG_KEY;
     }
 

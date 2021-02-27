@@ -1741,14 +1741,12 @@ typedef struct AVCodecContext {
      */
     int bits_per_raw_sample;
 
-#if FF_API_LOWRES
     /**
      * low resolution decoding, 1-> 1/2 size, 2->1/4 size
      * - encoding: unused
      * - decoding: Set by user.
      */
      int lowres;
-#endif
 
 #if FF_API_CODED_FRAME
     /**
@@ -2084,15 +2082,6 @@ typedef struct AVCodecContext {
      */
     const AVCodecDescriptor *codec_descriptor;
 
-#if !FF_API_LOWRES
-    /**
-     * low resolution decoding, 1-> 1/2 size, 2->1/4 size
-     * - encoding: unused
-     * - decoding: Set by user.
-     */
-     int lowres;
-#endif
-
     /**
      * Current statistics for PTS correction.
      * - decoding: maintained and used by libavcodec, not intended to be used by user apps
@@ -2366,12 +2355,10 @@ void                     av_codec_set_codec_descriptor(AVCodecContext *avctx, co
 attribute_deprecated
 unsigned av_codec_get_codec_properties(const AVCodecContext *avctx);
 
-#if FF_API_LOWRES
 attribute_deprecated
 int  av_codec_get_lowres(const AVCodecContext *avctx);
 attribute_deprecated
 void av_codec_set_lowres(AVCodecContext *avctx, int val);
-#endif
 
 attribute_deprecated
 int  av_codec_get_seek_preroll(const AVCodecContext *avctx);
@@ -2783,14 +2770,13 @@ int avcodec_get_context_defaults3(AVCodecContext *s, const AVCodec *codec);
  */
 const AVClass *avcodec_get_class(void);
 
-#if FF_API_COPY_CONTEXT
+#if FF_API_GET_FRAME_CLASS
 /**
- * Get the AVClass for AVFrame. It can be used in combination with
- * AV_OPT_SEARCH_FAKE_OBJ for examining options.
- *
- * @see av_opt_find().
+ * @deprecated This function should not be used.
  */
+attribute_deprecated
 const AVClass *avcodec_get_frame_class(void);
+#endif
 
 /**
  * Get the AVClass for AVSubtitleRect. It can be used in combination with
@@ -2800,6 +2786,7 @@ const AVClass *avcodec_get_frame_class(void);
  */
 const AVClass *avcodec_get_subtitle_rect_class(void);
 
+#if FF_API_COPY_CONTEXT
 /**
  * Copy the settings of the source AVCodecContext into the destination
  * AVCodecContext. The resulting destination codec context will be
@@ -3525,7 +3512,10 @@ typedef struct AVCodecParser {
                         const uint8_t *buf, int buf_size);
     void (*parser_close)(AVCodecParserContext *s);
     int (*split)(AVCodecContext *avctx, const uint8_t *buf, int buf_size);
+#if FF_API_NEXT
+    attribute_deprecated
     struct AVCodecParser *next;
+#endif
 } AVCodecParser;
 
 /**
@@ -3797,12 +3787,6 @@ void avcodec_get_chroma_sub_sample(enum AVPixelFormat pix_fmt, int *h_shift, int
 unsigned int avcodec_pix_fmt_to_codec_tag(enum AVPixelFormat pix_fmt);
 
 /**
- * @deprecated see av_get_pix_fmt_loss()
- */
-int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt, enum AVPixelFormat src_pix_fmt,
-                             int has_alpha);
-
-/**
  * Find the best pixel format to convert to given a certain source pixel
  * format.  When converting from one pixel format to another, information loss
  * may occur.  For example, when converting from RGB24 to GRAY, the color
@@ -3823,15 +3807,24 @@ enum AVPixelFormat avcodec_find_best_pix_fmt_of_list(const enum AVPixelFormat *p
                                             enum AVPixelFormat src_pix_fmt,
                                             int has_alpha, int *loss_ptr);
 
+#if FF_API_AVCODEC_PIX_FMT
+/**
+ * @deprecated see av_get_pix_fmt_loss()
+ */
+attribute_deprecated
+int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt, enum AVPixelFormat src_pix_fmt,
+                             int has_alpha);
 /**
  * @deprecated see av_find_best_pix_fmt_of_2()
  */
+attribute_deprecated
 enum AVPixelFormat avcodec_find_best_pix_fmt_of_2(enum AVPixelFormat dst_pix_fmt1, enum AVPixelFormat dst_pix_fmt2,
                                             enum AVPixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
 
 attribute_deprecated
 enum AVPixelFormat avcodec_find_best_pix_fmt2(enum AVPixelFormat dst_pix_fmt1, enum AVPixelFormat dst_pix_fmt2,
                                             enum AVPixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
+#endif
 
 enum AVPixelFormat avcodec_default_get_format(struct AVCodecContext *s, const enum AVPixelFormat * fmt);
 
