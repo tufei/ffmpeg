@@ -43,7 +43,6 @@
 #include "decode.h"
 #include "hwconfig.h"
 #include "internal.h"
-#include "packet_internal.h"
 #include "thread.h"
 
 typedef struct FramePool {
@@ -145,24 +144,44 @@ fail2:
 
 #define IS_EMPTY(pkt) (!(pkt)->data)
 
-static int extract_packet_props(AVCodecInternal *avci, AVPacket *pkt)
+static int copy_packet_props(AVPacket *dst, const AVPacket *src)
 {
-    int ret = 0;
-
-    ret = avpriv_packet_list_put(&avci->pkt_props, &avci->pkt_props_tail, pkt,
-                                 av_packet_copy_props, 0);
+    int ret = av_packet_copy_props(dst, src);
     if (ret < 0)
         return ret;
-    avci->pkt_props_tail->pkt.size = pkt->size; // HACK: Needed for ff_decode_frame_props().
-    avci->pkt_props_tail->pkt.data = (void*)1;  // HACK: Needed for IS_EMPTY().
+
+    dst->size = src->size; // HACK: Needed for ff_decode_frame_props().
+    dst->data = (void*)1;  // HACK: Needed for IS_EMPTY().
+
+    return 0;
+}
+
+static int extract_packet_props(AVCodecInternal *avci, const AVPacket *pkt)
+{
+    AVPacket tmp = { 0 };
+    int ret = 0;
 
     if (IS_EMPTY(avci->last_pkt_props)) {
-        ret = avpriv_packet_list_get(&avci->pkt_props,
-                                     &avci->pkt_props_tail,
-                                     avci->last_pkt_props);
-        av_assert0(ret != AVERROR(EAGAIN));
+        if (av_fifo_size(avci->pkt_props) >= sizeof(*pkt)) {
+            av_fifo_generic_read(avci->pkt_props, avci->last_pkt_props,
+                                 sizeof(*avci->last_pkt_props), NULL);
+        } else
+            return copy_packet_props(avci->last_pkt_props, pkt);
     }
-    return ret;
+
+    if (av_fifo_space(avci->pkt_props) < sizeof(*pkt)) {
+        ret = av_fifo_grow(avci->pkt_props, sizeof(*pkt));
+        if (ret < 0)
+            return ret;
+    }
+
+    ret = copy_packet_props(&tmp, pkt);
+    if (ret < 0)
+        return ret;
+
+    av_fifo_generic_write(avci->pkt_props, &tmp, sizeof(tmp), NULL);
+
+    return 0;
 }
 
 int ff_decode_bsfs_init(AVCodecContext *avctx)
@@ -865,17 +884,16 @@ static int recode_subtitle(AVCodecContext *avctx,
         return 0;
 
 #if CONFIG_ICONV
-    cd = iconv_open("UTF-8", avctx->sub_charenc);
-    av_assert0(cd != (iconv_t)-1);
-
     inb = inpkt->data;
     inl = inpkt->size;
 
     if (inl >= INT_MAX / UTF8_MAX_BYTES - AV_INPUT_BUFFER_PADDING_SIZE) {
         av_log(avctx, AV_LOG_ERROR, "Subtitles packet is too big for recoding\n");
-        ret = AVERROR(ENOMEM);
-        goto end;
+        return AVERROR(ERANGE);
     }
+
+    cd = iconv_open("UTF-8", avctx->sub_charenc);
+    av_assert0(cd != (iconv_t)-1);
 
     ret = av_new_packet(&tmp, inl * UTF8_MAX_BYTES);
     if (ret < 0)
@@ -1024,9 +1042,9 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
         AVPacket pkt_recoded = *avpkt;
 
         ret = recode_subtitle(avctx, &pkt_recoded, avpkt);
-        if (ret < 0) {
-            *got_sub_ptr = 0;
-        } else {
+        if (ret < 0)
+            return ret;
+
              ret = extract_packet_props(avctx->internal, &pkt_recoded);
              if (ret < 0)
                 return ret;
@@ -1080,7 +1098,6 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
 
                 av_packet_unref(&pkt_recoded);
             }
-        }
 
         if (*got_sub_ptr)
             avctx->frame_number++;
@@ -1726,10 +1743,9 @@ int ff_decode_frame_props(AVCodecContext *avctx, AVFrame *frame)
         { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
     };
 
-    if (IS_EMPTY(pkt))
-        avpriv_packet_list_get(&avctx->internal->pkt_props,
-                               &avctx->internal->pkt_props_tail,
-                               pkt);
+    if (IS_EMPTY(pkt) && av_fifo_size(avctx->internal->pkt_props) >= sizeof(*pkt))
+        av_fifo_generic_read(avctx->internal->pkt_props,
+                             pkt, sizeof(*pkt), NULL);
 
     if (pkt) {
         frame->pts = pkt->pts;
