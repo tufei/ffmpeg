@@ -29,6 +29,7 @@ HEADERS = ac3_parser.h                                                  \
 OBJS = ac3_parser.o                                                     \
        adts_parser.o                                                    \
        allcodecs.o                                                      \
+       avcodec.o                                                        \
        avdct.o                                                          \
        avpacket.o                                                       \
        avpicture.o                                                      \
@@ -37,6 +38,7 @@ OBJS = ac3_parser.o                                                     \
        bitstream_filters.o                                              \
        bsf.o                                                            \
        codec_desc.o                                                     \
+       codec_par.o                                                      \
        d3d11va.o                                                        \
        decode.o                                                         \
        dirac.o                                                          \
