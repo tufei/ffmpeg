@@ -2263,7 +2263,7 @@ static void mov_parse_stsd_audio(MOVContext *c, AVIOContext *pb,
     }
 
     bits_per_sample = av_get_bits_per_sample(st->codecpar->codec_id);
-    if (bits_per_sample) {
+    if (bits_per_sample && (bits_per_sample >> 3) * (uint64_t)st->codecpar->channels <= INT_MAX) {
         st->codecpar->bits_per_coded_sample = bits_per_sample;
         sc->sample_size = (bits_per_sample >> 3) * st->codecpar->channels;
     }
@@ -7121,7 +7121,7 @@ static int mov_probe(const AVProbeData *p)
         if ((offset + 8) > (unsigned int)p->buf_size)
             break;
         size = AV_RB32(p->buf + offset);
-        if (size == 1 && offset + 16 > (unsigned int)p->buf_size) {
+        if (size == 1 && offset + 16 <= (unsigned int)p->buf_size) {
             size = AV_RB64(p->buf+offset + 8);
             minsize = 16;
         } else if (size == 0) {
@@ -7947,6 +7947,8 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
                    sc->ffindex, sample->pos);
             if (should_retry(sc->pb, ret64)) {
                 mov_current_sample_dec(sc);
+            } else if (ret64 < 0) {
+                return (int)ret64;
             }
             return AVERROR_INVALIDDATA;
         }
