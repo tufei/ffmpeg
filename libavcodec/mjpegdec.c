@@ -76,6 +76,7 @@ static int init_default_huffman_tables(MJpegDecodeContext *s)
     int i, ret;
 
     for (i = 0; i < FF_ARRAY_ELEMS(ht); i++) {
+        ff_free_vlc(&s->vlcs[ht[i].class][ht[i].index]);
         ret = ff_mjpeg_build_vlc(&s->vlcs[ht[i].class][ht[i].index],
                                  ht[i].bits, ht[i].values,
                                  ht[i].class == 1, s->avctx);
@@ -153,7 +154,8 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
         if (ff_mjpeg_decode_dht(s)) {
             av_log(avctx, AV_LOG_ERROR,
                    "error using external huffman table, switching back to internal\n");
-            init_default_huffman_tables(s);
+            if ((ret = init_default_huffman_tables(s)) < 0)
+                return ret;
         }
     }
     if (avctx->field_order == AV_FIELD_BB) { /* quicktime icefloe 019 */
