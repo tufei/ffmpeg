@@ -4620,7 +4620,7 @@ static int mov_read_tkhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             disp_transform[i] = hypot(sc->display_matrix[0 + i],
                                       sc->display_matrix[3 + i]);
 
-        if (disp_transform[0] > 0       && disp_transform[1] > 0 &&
+        if (disp_transform[0] > 1       && disp_transform[1] > 1 &&
             disp_transform[0] < (1<<24) && disp_transform[1] < (1<<24) &&
             fabs((disp_transform[0] / disp_transform[1]) - 1.0) > 0.01)
             st->sample_aspect_ratio = av_d2q(
@@ -7114,7 +7114,7 @@ static int mov_probe(const AVProbeData *p)
         int64_t size;
         int minsize = 8;
         /* ignore invalid offset */
-        if ((offset + 8) > (unsigned int)p->buf_size)
+        if ((offset + 8ULL) > (unsigned int)p->buf_size)
             break;
         size = AV_RB32(p->buf + offset);
         if (size == 1 && offset + 16 <= (unsigned int)p->buf_size) {
@@ -7161,6 +7161,8 @@ static int mov_probe(const AVProbeData *p)
             score  = FFMAX(score, AVPROBE_SCORE_EXTENSION);
             break;
         }
+        if (size > INT64_MAX - offset)
+            break;
         offset += size;
     }
     if (score > AVPROBE_SCORE_MAX - 50 && moov_offset != -1) {
