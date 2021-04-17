@@ -671,9 +671,9 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
     }
 
     if (do_ioproc) {
-        if (ort_model->model->pre_proc != NULL) {
-            ort_model->model->pre_proc(in_frame, &input,
-                                       ort_model->model->filter_ctx);
+        if (ort_model->model->frame_pre_proc != NULL) {
+            ort_model->model->frame_pre_proc(in_frame, &input,
+                                             ort_model->model->filter_ctx);
         } else {
             ff_proc_from_frame_to_dnn(in_frame, &input,
                                       ort_model->model->func_type, ctx);
@@ -725,9 +725,9 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
     }
 
     if (do_ioproc) {
-        if (ort_model->model->post_proc != NULL) {
-            ort_model->model->post_proc(out_frame, &output,
-                                        ort_model->model->filter_ctx);
+        if (ort_model->model->frame_post_proc != NULL) {
+            ort_model->model->frame_post_proc(out_frame, &output,
+                                              ort_model->model->filter_ctx);
         } else {
             ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
         }
