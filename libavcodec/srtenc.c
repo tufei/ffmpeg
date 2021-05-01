@@ -244,29 +244,14 @@ static int encode_frame(AVCodecContext *avctx,
             return AVERROR(EINVAL);
         }
 
-#if FF_API_ASS_TIMING
-        if (!strncmp(ass, "Dialogue: ", 10)) {
-            int num;
-            dialog = ff_ass_split_dialog(s->ass_ctx, ass, 0, &num);
-            for (; dialog && num--; dialog++) {
-                s->alignment_applied = 0;
-                if (avctx->codec_id == AV_CODEC_ID_SUBRIP)
-                    srt_style_apply(s, dialog->style);
-                ff_ass_split_override_codes(cb, s, dialog->text);
-            }
-        } else {
-#endif
-            dialog = ff_ass_split_dialog2(s->ass_ctx, ass);
-            if (!dialog)
-                return AVERROR(ENOMEM);
-            s->alignment_applied = 0;
-            if (avctx->codec_id == AV_CODEC_ID_SUBRIP)
-                srt_style_apply(s, dialog->style);
-            ff_ass_split_override_codes(cb, s, dialog->text);
-            ff_ass_free_dialog(&dialog);
-#if FF_API_ASS_TIMING
-        }
-#endif
+        dialog = ff_ass_split_dialog2(s->ass_ctx, ass);
+        if (!dialog)
+            return AVERROR(ENOMEM);
+        s->alignment_applied = 0;
+        if (avctx->codec_id == AV_CODEC_ID_SUBRIP)
+            srt_style_apply(s, dialog->style);
+        ff_ass_split_override_codes(cb, s, dialog->text);
+        ff_ass_free_dialog(&dialog);
     }
 
     if (!av_bprint_is_complete(&s->buffer))
@@ -305,7 +290,7 @@ static int srt_encode_close(AVCodecContext *avctx)
 
 #if CONFIG_SRT_ENCODER
 /* deprecated encoder */
-AVCodec ff_srt_encoder = {
+const AVCodec ff_srt_encoder = {
     .name           = "srt",
     .long_name      = NULL_IF_CONFIG_SMALL("SubRip subtitle"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
@@ -318,7 +303,7 @@ AVCodec ff_srt_encoder = {
 #endif
 
 #if CONFIG_SUBRIP_ENCODER
-AVCodec ff_subrip_encoder = {
+const AVCodec ff_subrip_encoder = {
     .name           = "subrip",
     .long_name      = NULL_IF_CONFIG_SMALL("SubRip subtitle"),
     .type           = AVMEDIA_TYPE_SUBTITLE,
@@ -331,7 +316,7 @@ AVCodec ff_subrip_encoder = {
 #endif
 
 #if CONFIG_TEXT_ENCODER
-AVCodec ff_text_encoder = {
+const AVCodec ff_text_encoder = {
     .name           = "text",
     .long_name      = NULL_IF_CONFIG_SMALL("Raw text subtitle"),
     .type           = AVMEDIA_TYPE_SUBTITLE,

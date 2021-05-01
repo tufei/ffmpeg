@@ -1092,7 +1092,7 @@ static int read_gab2_sub(AVFormatContext *s, AVStream *st, AVPacket *pkt)
         uint8_t desc[256];
         int score      = AVPROBE_SCORE_EXTENSION, ret;
         AVIStream *ast = st->priv_data;
-        ff_const59 AVInputFormat *sub_demuxer;
+        const AVInputFormat *sub_demuxer;
         AVRational time_base;
         int size;
         AVProbeData pd;
@@ -1969,7 +1969,7 @@ static int avi_probe(const AVProbeData *p)
     return 0;
 }
 
-AVInputFormat ff_avi_demuxer = {
+const AVInputFormat ff_avi_demuxer = {
     .name           = "avi",
     .long_name      = NULL_IF_CONFIG_SMALL("AVI (Audio Video Interleaved)"),
     .priv_data_size = sizeof(AVIContext),

@@ -111,6 +111,8 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     unsigned int min_channels = 1;
     unsigned int max_channels = 2;
 
+    adpcm_flush(avctx);
+
     switch(avctx->codec->id) {
     case AV_CODEC_ID_ADPCM_IMA_AMV:
         max_channels = 1;
@@ -201,8 +203,6 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
     default:
         avctx->sample_fmt = AV_SAMPLE_FMT_S16;
     }
-
-    adpcm_flush(avctx);
     return 0;
 }
 
@@ -1400,16 +1400,16 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
                 for (n = nb_samples / 2; n > 0; n--) {
                     int v = bytestream2_get_byteu(&gb);
-                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
                     *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
+                    *smp++ = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
                 }
             }
         } else {
             for (n = nb_samples / 2; n > 0; n--) {
                 for (channel = 0; channel < avctx->channels; channel++) {
                     int v = bytestream2_get_byteu(&gb);
-                    *samples++  = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
-                    samples[st] = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
+                    *samples++  = adpcm_ima_expand_nibble(&c->status[channel], v & 0x0F, 3);
+                    samples[st] = adpcm_ima_expand_nibble(&c->status[channel], v >> 4  , 3);
                 }
                 samples += avctx->channels;
             }
@@ -2101,18 +2101,11 @@ static void adpcm_flush(AVCodecContext *avctx)
         break;
 
     case AV_CODEC_ID_ADPCM_IMA_APM:
-        if (avctx->extradata) {
-            if (avctx->extradata_size >= 28) {
-                c->status[0].predictor  = av_clip_intp2(AV_RL32(avctx->extradata + 16), 18);
-                c->status[0].step_index = av_clip(AV_RL32(avctx->extradata + 20), 0, 88);
-                c->status[1].predictor  = av_clip_intp2(AV_RL32(avctx->extradata + 4), 18);
-                c->status[1].step_index = av_clip(AV_RL32(avctx->extradata + 8), 0, 88);
-            } else if (avctx->extradata_size >= 16) {
-                c->status[0].predictor  = av_clip_intp2(AV_RL32(avctx->extradata +  0), 18);
-                c->status[0].step_index = av_clip(AV_RL32(avctx->extradata +  4), 0, 88);
-                c->status[1].predictor  = av_clip_intp2(AV_RL32(avctx->extradata +  8), 18);
-                c->status[1].step_index = av_clip(AV_RL32(avctx->extradata + 12), 0, 88);
-            }
+        if (avctx->extradata && avctx->extradata_size >= 28) {
+            c->status[0].predictor  = av_clip_intp2(AV_RL32(avctx->extradata + 16), 18);
+            c->status[0].step_index = av_clip(AV_RL32(avctx->extradata + 20), 0, 88);
+            c->status[1].predictor  = av_clip_intp2(AV_RL32(avctx->extradata + 4), 18);
+            c->status[1].step_index = av_clip(AV_RL32(avctx->extradata + 8), 0, 88);
         }
         break;
 
@@ -2139,7 +2132,7 @@ static const enum AVSampleFormat sample_fmts_both[] = { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_NONE };
 
 #define ADPCM_DECODER(id_, sample_fmts_, name_, long_name_) \
-AVCodec ff_ ## name_ ## _decoder = {                        \
+const AVCodec ff_ ## name_ ## _decoder = {                  \
     .name           = #name_,                               \
     .long_name      = NULL_IF_CONFIG_SMALL(long_name_),     \
     .type           = AVMEDIA_TYPE_AUDIO,                   \
