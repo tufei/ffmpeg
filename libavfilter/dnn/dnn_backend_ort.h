@@ -34,11 +34,7 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
                                 const char *options, AVFilterContext *filter_ctx);
 
 DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
-                                       const char *input_name,
-                                       AVFrame *in_frame,
-                                       const char **output_names,
-                                       uint32_t nb_output,
-                                       AVFrame *out_frame);
+                                       DNNExecBaseParams *exec_params);
 
 void ff_dnn_free_model_ort(DNNModel **model);
 

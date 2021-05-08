@@ -34,6 +34,7 @@
 #include "dnn_backend_native_layer_maximum.h"
 #include "dnn_io_proc.h"
 
+#include "dnn_backend_common.h"
 #include <onnxruntime_c_api.h>
 
 typedef struct ORTOptions {
@@ -743,27 +744,18 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
 }
 
 DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
-                                       const char *input_name,
-                                       AVFrame *in_frame,
-                                       const char **output_names,
-                                       uint32_t nb_output,
-                                       AVFrame *out_frame)
+                                       DNNExecBaseParams *exec_params)
 {
     ORTModel *ort_model = (ORTModel *)model->model;
     ORTContext *ctx = &ort_model->ctx;
 
-    if (!in_frame) {
-        av_log(ctx, AV_LOG_ERROR, "In frame is NULL when execute model.\n");
-        return DNN_ERROR;
+    if (ff_check_exec_params(ctx, DNN_ORT, model->func_type, exec_params) != 0) {
+         return DNN_ERROR;
     }
 
-    if (!out_frame) {
-        av_log(ctx, AV_LOG_ERROR, "Out frame is NULL when execute model.\n");
-        return DNN_ERROR;
-    }
-
-    return execute_model_ort(model, input_name, in_frame, output_names,
-                             nb_output, out_frame, 1);
+    return execute_model_ort(model, exec_params->input_name,
+                             exec_params->in_frame, exec_params->output_names,
+                             exec_params->nb_output, exec_params->out_frame, 1);
 }
 
 void ff_dnn_free_model_ort(DNNModel **model)
