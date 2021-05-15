@@ -619,6 +619,7 @@ extern const AVCodec ff_adpcm_g726_encoder;
 extern const AVCodec ff_adpcm_g726_decoder;
 extern const AVCodec ff_adpcm_g726le_encoder;
 extern const AVCodec ff_adpcm_g726le_decoder;
+extern const AVCodec ff_adpcm_ima_acorn_decoder;
 extern const AVCodec ff_adpcm_ima_amv_decoder;
 extern const AVCodec ff_adpcm_ima_amv_encoder;
 extern const AVCodec ff_adpcm_ima_alp_decoder;
@@ -765,10 +766,11 @@ extern const AVCodec ff_libx262_encoder;
 #if CONFIG_LIBX264_ENCODER
 #include <x264.h>
 #if X264_BUILD < 153
-extern AVCodec ff_libx264_encoder;
+#define LIBX264_CONST
 #else
-extern const AVCodec ff_libx264_encoder;
+#define LIBX264_CONST const
 #endif
+extern LIBX264_CONST AVCodec ff_libx264_encoder;
 #endif
 extern const AVCodec ff_libx264rgb_encoder;
 extern AVCodec ff_libx265_encoder;
