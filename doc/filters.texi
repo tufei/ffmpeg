@@ -14014,6 +14014,8 @@ ffmpeg -i input.mov -vf lensfun=make=Canon:model="Canon EOS 100D":lens_model="Ca
 Obtain the VMAF (Video Multi-Method Assessment Fusion)
 score between two input videos.
 
+The first input is the encoded video, and the second input is the reference video.
+
 The obtained VMAF score is printed through the logging system.
 
 It requires Netflix's vmaf library (libvmaf) as a pre-requisite.
@@ -25302,10 +25304,10 @@ The expression is evaluated through the eval API and can contain the following
 constants:
 
 @table @option
-@item VALUE1
+@item VALUE1, FRAMEVAL
 Float representation of @code{value} from metadata key.
 
-@item VALUE2
+@item VALUE2, USERVAL
 Float representation of @code{value} as supplied by user in @code{value} option.
 @end table
 
