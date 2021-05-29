@@ -319,14 +319,9 @@ static int process_frame(FFFrameSync *fs)
     out_frame = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out_frame) {
         av_frame_free(&main_frame);
-        av_frame_free(&ref_frame);
         return AVERROR(ENOMEM);
     }
     av_frame_copy_props(out_frame, main_frame);
-
-    if (ctx->is_disabled || !ref_frame) {
-        av_frame_copy_props(ref_frame, main_frame);
-    }
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         if (!(s->planes & (1 << plane))) {
@@ -344,6 +339,7 @@ static int process_frame(FFFrameSync *fs)
                        s->planewidth[plane], s->planeheight[plane],
                        main_frame->linesize[plane] / 2, ref_frame->linesize[plane] / 2, out_frame->linesize[plane] / 2, (1 << s->depth) - 1.f);
     }
+    av_frame_free(&main_frame);
 
     return ff_filter_frame(outlink, out_frame);
 }
