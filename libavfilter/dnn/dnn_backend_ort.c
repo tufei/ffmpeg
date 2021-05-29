@@ -671,6 +671,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
         return DNN_ERROR;
     }
 
+#if 0
     if (do_ioproc) {
         if (ort_model->model->frame_pre_proc != NULL) {
             ort_model->model->frame_pre_proc(in_frame, &input,
@@ -680,6 +681,27 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
                                       ort_model->model->func_type, ctx);
         }
     }
+#else
+    switch (ort_model->model->func_type) {
+    case DFT_PROCESS_FRAME:
+        if (do_ioproc) {
+            if (ort_model->model->frame_pre_proc != NULL) {
+                ort_model->model->frame_pre_proc(in_frame, &input,
+                                                 ort_model->model->filter_ctx);
+            } else {
+                ff_proc_from_frame_to_dnn(in_frame, &input, ctx);
+            }
+        }
+        break;
+    case DFT_ANALYTICS_DETECT:
+        ff_frame_to_dnn_detect(in_frame, &input, ctx);
+        break;
+    default:
+        avpriv_report_missing_feature(ctx, "model function type %d",
+                                      ort_model->model->func_type);
+        break;
+    }
+#endif
 
     if (nb_output != 1) {
         // currently, the filter does not need multiple outputs,
@@ -725,6 +747,7 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
         return DNN_ERROR;
     }
 
+#if 0
     if (do_ioproc) {
         if (ort_model->model->frame_post_proc != NULL) {
             ort_model->model->frame_post_proc(out_frame, &output,
@@ -736,6 +759,40 @@ static DNNReturnType execute_model_ort(const DNNModel *model,
         out_frame->width = output.width;
         out_frame->height = output.height;
     }
+#else
+    switch (model->func_type) {
+    case DFT_PROCESS_FRAME:
+        //it only support 1 output if it's frame in & frame out
+        if (do_ioproc) {
+            if (ort_model->model->frame_post_proc != NULL) {
+                ort_model->model->frame_post_proc(out_frame, &output,
+                                                  ort_model->model->filter_ctx);
+            } else {
+                ff_proc_from_dnn_to_frame(out_frame, &output, ctx);
+            }
+        } else {
+            out_frame->width = output.width;
+            out_frame->height = output.height;
+        }
+        break;
+    case DFT_ANALYTICS_DETECT:
+        if (!model->detect_post_proc) {
+            av_log(ctx, AV_LOG_ERROR, "Detect filter needs provide post proc\n");
+            return DNN_ERROR;
+        }
+        model->detect_post_proc(out_frame, &output, num_outputs,
+                                model->filter_ctx);
+        break;
+    default:
+        ort->ReleaseValue(input_tensor);
+        ort->ReleaseValue(output_tensor);
+
+        av_log(ctx, AV_LOG_ERROR,
+               "ONNXRunTime backend does not support this kind of dnn "
+               "filter now\n");
+        return DNN_ERROR;
+    }
+#endif
 
     ort->ReleaseValue(input_tensor);
     ort->ReleaseValue(output_tensor);
