@@ -293,6 +293,8 @@ static void infer_completion_callback(void *args)
 
     request->inference_count = 0;
     if (ff_safe_queue_push_back(requestq, request) < 0) {
+        ie_infer_request_free(&request->infer_request);
+        av_freep(&request);
         av_log(ctx, AV_LOG_ERROR, "Failed to push back request_queue.\n");
         return;
     }
@@ -596,8 +598,10 @@ static DNNReturnType extract_inference_from_task(DNNFunctionType func_type, Task
             InferenceItem *inference;
             const AVDetectionBBox *bbox = av_get_detection_bbox(header, i);
 
-            if (av_strncasecmp(bbox->detect_label, params->target, sizeof(bbox->detect_label)) != 0) {
-                continue;
+            if (params->target) {
+                if (av_strncasecmp(bbox->detect_label, params->target, sizeof(bbox->detect_label)) != 0) {
+                    continue;
+                }
             }
 
             inference = av_malloc(sizeof(*inference));
