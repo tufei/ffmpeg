@@ -31,6 +31,7 @@
 #include "libavformat/avio.h"
 
 #include "libavcodec/avcodec.h"
+#include "libavcodec/bsf.h"
 
 #include "libavfilter/avfilter.h"
 
@@ -119,6 +120,7 @@ typedef struct OptionsContext {
     int64_t input_ts_offset;
     int loop;
     int rate_emu;
+    float readrate;
     int accurate_seek;
     int thread_queue_size;
 
@@ -418,6 +420,7 @@ typedef struct InputFile {
                              from ctx.nb_streams if new streams appear during av_read_frame() */
     int nb_streams_warn;  /* number of streams that the user was warned of */
     int rate_emu;
+    float readrate;
     int accurate_seek;
 
     AVPacket *pkt;
