@@ -2125,18 +2125,18 @@ context similarity is defined by comparing their surrounding patches of size
 The filter accepts the following options:
 
 @table @option
-@item s
+@item strength, s
 Set denoising strength. Allowed range is from 0.00001 to 10. Default value is 0.00001.
 
-@item p
+@item patch, p
 Set patch radius duration. Allowed range is from 1 to 100 milliseconds.
 Default value is 2 milliseconds.
 
-@item r
+@item research, r
 Set research radius duration. Allowed range is from 2 to 300 milliseconds.
 Default value is 6 milliseconds.
 
-@item o
+@item output, o
 Set the output mode.
 
 It accepts the following values:
@@ -2153,7 +2153,7 @@ Pass only noise.
 Default value is @var{o}.
 @end table
 
-@item m
+@item smooth, m
 Set smooth factor. Default value is @var{11}. Allowed range is from @var{1} to @var{15}.
 @end table
 
@@ -12286,6 +12286,9 @@ fill pixels using wrapping
 
 @item fade
 fade pixels to constant value
+
+@item margins
+fill pixels at top and bottom with weighted averages pixels near borders
 @end table
 
 Default is @var{smear}.
@@ -16840,6 +16843,10 @@ Available LUTs:
 @item range2
 @item shadows
 @item highlights
+@item solar
+@item nominal
+@item preferred
+@item total
 @end table
 
 @item opacity
@@ -19864,6 +19871,10 @@ of pixel component from 2nd threshold stream, third stream value will picked,
 otherwise fourth stream pixel component value will be picked.
 
 Using color source filter one can perform various types of thresholding:
+
+@subsection Commands
+
+This filter supports the all options as @ref{commands}.
 
 @subsection Examples
 
@@ -25284,7 +25295,7 @@ level. By default, it logs a message at a frequency of 10Hz with the
 Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
 Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
 
-The filter can only analyze streams which have a sampling rate of 48000 Hz and whose
+The filter can only analyze streams which have
 sample format is double-precision floating point. The input stream will be converted to
 this specification, if needed. Users may need to insert aformat and/or aresample filters
 after this filter to obtain the original parameters.
