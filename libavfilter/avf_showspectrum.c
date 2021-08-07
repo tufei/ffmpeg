@@ -33,6 +33,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/cpu.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/xga_font_data.h"
@@ -48,7 +49,7 @@ enum DataMode     { D_MAGNITUDE, D_PHASE, NB_DMODES };
 enum FrequencyScale { F_LINEAR, F_LOG, NB_FSCALES };
 enum DisplayScale { LINEAR, SQRT, CBRT, LOG, FOURTHRT, FIFTHRT, NB_SCALES };
 enum ColorMode    { CHANNEL, INTENSITY, RAINBOW, MORELAND, NEBULAE, FIRE, FIERY, FRUIT, COOL, MAGMA, GREEN, VIRIDIS, PLASMA, CIVIDIS, TERRAIN, NB_CLMODES };
-enum SlideMode    { REPLACE, SCROLL, FULLFRAME, RSCROLL, NB_SLIDES };
+enum SlideMode    { REPLACE, SCROLL, FULLFRAME, RSCROLL, LREPLACE, NB_SLIDES };
 enum Orientation  { VERTICAL, HORIZONTAL, NB_ORIENTATIONS };
 
 typedef struct ShowSpectrumContext {
@@ -100,6 +101,8 @@ typedef struct ShowSpectrumContext {
     int single_pic;
     int legend;
     int start_x, start_y;
+    float drange;
+    float dmin, dscale;
     int (*plot_channel)(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs);
 } ShowSpectrumContext;
 
@@ -114,6 +117,7 @@ static const AVOption showspectrum_options[] = {
         { "scroll", "scroll from right to left", 0, AV_OPT_TYPE_CONST, {.i64=SCROLL}, 0, 0, FLAGS, "slide" },
         { "fullframe", "return full frames", 0, AV_OPT_TYPE_CONST, {.i64=FULLFRAME}, 0, 0, FLAGS, "slide" },
         { "rscroll", "scroll from left to right", 0, AV_OPT_TYPE_CONST, {.i64=RSCROLL}, 0, 0, FLAGS, "slide" },
+        { "lreplace", "replace from right to left", 0, AV_OPT_TYPE_CONST, {.i64=LREPLACE}, 0, 0, FLAGS, "slide" },
     { "mode", "set channel display mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=COMBINED}, COMBINED, NB_MODES-1, FLAGS, "mode" },
         { "combined", "combined mode", 0, AV_OPT_TYPE_CONST, {.i64=COMBINED}, 0, 0, FLAGS, "mode" },
         { "separate", "separate mode", 0, AV_OPT_TYPE_CONST, {.i64=SEPARATE}, 0, 0, FLAGS, "mode" },
@@ -179,6 +183,7 @@ static const AVOption showspectrum_options[] = {
     { "stop",  "stop frequency",  OFFSET(stop),  AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
     { "fps",   "set video rate",  OFFSET(rate_str), AV_OPT_TYPE_STRING, {.str = "auto"}, 0, 0, FLAGS },
     { "legend", "draw legend", OFFSET(legend), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, FLAGS },
+    { "drange", "set dynamic range in dBFS", OFFSET(drange), AV_OPT_TYPE_FLOAT, {.dbl = 120}, 10, 200, FLAGS },
     { NULL }
 };
 
@@ -869,10 +874,10 @@ static int draw_legend(AVFilterContext *ctx, int samples)
         }
 
         for (y = 0; ch == 0 && y < h; y += h / 10) {
-            float value = 120.f * log10f(1.f - y / (float)h);
+            float value = s->drange * log10f(1.f - y / (float)h);
             char *text;
 
-            if (value < -120)
+            if (value < -s->drange)
                 break;
             text = av_asprintf("%.0f dB", value);
             if (!text)
@@ -923,7 +928,7 @@ static float get_value(AVFilterContext *ctx, int ch, int y)
         a = av_clipf(powf(a, 0.20), 0, 1);
         break;
     case LOG:
-        a = 1.f + log10f(av_clipf(a, 1e-6, 1)) / 6.f; // zero = -120dBFS
+        a = 1.f + log10f(av_clipf(a, s->dmin, 1.f)) * s->dscale;
         break;
     default:
         av_assert0(0);
@@ -997,6 +1002,9 @@ static int config_output(AVFilterLink *outlink)
     int i, fft_size, h, w, ret;
     float overlap;
 
+    s->dmin = expf(-s->drange * M_LN10 / 20.f);
+    s->dscale = -1.f / log10f(s->dmin);
+
     switch (s->fscale) {
     case F_LINEAR: s->plot_channel = plot_channel_lin; break;
     case F_LOG:    s->plot_channel = plot_channel_log; break;
@@ -1037,7 +1045,7 @@ static int config_output(AVFilterLink *outlink)
     }
 
     s->win_size = fft_size;
-    s->buf_size = FFALIGN(s->win_size << (!!s->stop), 512);
+    s->buf_size = FFALIGN(s->win_size << (!!s->stop), av_cpu_max_align());
 
     if (!s->fft) {
         s->fft = av_calloc(inlink->channels, sizeof(*s->fft));
@@ -1186,11 +1194,18 @@ static int config_output(AVFilterLink *outlink)
         (s->orientation == HORIZONTAL && s->xpos >= s->h))
         s->xpos = 0;
 
+    if (s->sliding == LREPLACE) {
+        if (s->orientation == VERTICAL)
+            s->xpos = s->w - 1;
+        if (s->orientation == HORIZONTAL)
+            s->xpos = s->h - 1;
+    }
+
     s->auto_frame_rate = av_make_q(inlink->sample_rate, s->hop_size);
     if (s->orientation == VERTICAL && s->sliding == FULLFRAME)
-        s->auto_frame_rate.den *= s->w;
+        s->auto_frame_rate = av_mul_q(s->auto_frame_rate, av_make_q(1, s->w));
     if (s->orientation == HORIZONTAL && s->sliding == FULLFRAME)
-        s->auto_frame_rate.den *= s->h;
+        s->auto_frame_rate = av_mul_q(s->auto_frame_rate, av_make_q(1, s->h));
     if (!s->single_pic && strcmp(s->rate_str, "auto")) {
         int ret = av_parse_video_rate(&s->frame_rate, s->rate_str);
         if (ret < 0)
@@ -1376,11 +1391,20 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
     if (s->sliding != FULLFRAME || s->xpos == 0)
         outpicref->pts = av_rescale_q(insamples->pts, inlink->time_base, outlink->time_base);
 
-    s->xpos++;
-    if (s->orientation == VERTICAL && s->xpos >= s->w)
-        s->xpos = 0;
-    if (s->orientation == HORIZONTAL && s->xpos >= s->h)
-        s->xpos = 0;
+    if (s->sliding == LREPLACE) {
+        s->xpos--;
+        if (s->orientation == VERTICAL && s->xpos < 0)
+            s->xpos = s->w - 1;
+        if (s->orientation == HORIZONTAL && s->xpos < 0)
+            s->xpos = s->h - 1;
+    } else {
+        s->xpos++;
+        if (s->orientation == VERTICAL && s->xpos >= s->w)
+            s->xpos = 0;
+        if (s->orientation == HORIZONTAL && s->xpos >= s->h)
+            s->xpos = 0;
+    }
+
     if (!s->single_pic && (s->sliding != FULLFRAME || s->xpos == 0)) {
         if (s->old_pts < outpicref->pts) {
             AVFrame *clone;
@@ -1503,7 +1527,7 @@ static int activate(AVFilterContext *ctx)
                 memset(s->outpicref->data[2] + i * s->outpicref->linesize[2], 128, outlink->w);
             }
         }
-        s->outpicref->pts += s->consumed;
+        s->outpicref->pts += av_rescale_q(s->consumed, inlink->time_base, outlink->time_base);
         pts = s->outpicref->pts;
         ret = ff_filter_frame(outlink, s->outpicref);
         s->outpicref = NULL;
@@ -1623,6 +1647,7 @@ static const AVOption showspectrumpic_options[] = {
     { "rotation", "color rotation", OFFSET(rotation), AV_OPT_TYPE_FLOAT, {.dbl = 0}, -1, 1, FLAGS },
     { "start", "start frequency", OFFSET(start), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
     { "stop",  "stop frequency",  OFFSET(stop),  AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT32_MAX, FLAGS },
+    { "drange", "set dynamic range in dBFS", OFFSET(drange), AV_OPT_TYPE_FLOAT, {.dbl = 120}, 10, 200, FLAGS },
     { NULL }
 };
 
