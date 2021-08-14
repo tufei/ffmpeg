@@ -73,7 +73,6 @@ AVDictionary *format_opts, *codec_opts, *resample_opts;
 static FILE *report_file;
 static int report_file_level = AV_LOG_DEBUG;
 int hide_banner = 0;
-int cpu_count = -1;
 
 enum show_muxdemuxers {
     SHOW_DEFAULT,
@@ -904,20 +903,18 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
         if (!i && !cmd) {
             flags = 0;  /* missing relative prefix, build absolute value */
         }
-        if (!strncmp(token, "repeat", 6)) {
+        if (av_strstart(token, "repeat", &arg)) {
             if (cmd == '-') {
                 flags |= AV_LOG_SKIP_REPEATED;
             } else {
                 flags &= ~AV_LOG_SKIP_REPEATED;
             }
-            arg = token + 6;
-        } else if (!strncmp(token, "level", 5)) {
+        } else if (av_strstart(token, "level", &arg)) {
             if (cmd == '-') {
                 flags &= ~AV_LOG_PRINT_LEVEL;
             } else {
                 flags |= AV_LOG_PRINT_LEVEL;
             }
-            arg = token + 5;
         } else {
             break;
         }

@@ -32,7 +32,6 @@
 #include "libavutil/avstring.h"
 #include "libavutil/detection_bbox.h"
 #include "../internal.h"
-#include "queue.h"
 #include "safe_queue.h"
 #include <c_api/ie_c_api.h>
 #include "dnn_backend_common.h"
@@ -641,10 +640,15 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
     OVContext *ctx = &ov_model->ctx;
     TaskItem task;
     OVRequestItem *request;
-    AVFrame *in_frame = NULL;
-    AVFrame *out_frame = NULL;
     IEStatusCode status;
     input_shapes_t input_shapes;
+    DNNExecBaseParams exec_params = {
+        .input_name     = input_name,
+        .output_names   = &output_name,
+        .nb_output      = 1,
+        .in_frame       = NULL,
+        .out_frame      = NULL,
+    };
 
     if (ov_model->model->func_type != DFT_PROCESS_FRAME) {
         av_log(ctx, AV_LOG_ERROR, "Get output dim only when processing frame.\n");
@@ -670,51 +674,29 @@ static DNNReturnType get_output_ov(void *model, const char *input_name, int inpu
         }
     }
 
-    in_frame = av_frame_alloc();
-    if (!in_frame) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for input frame\n");
+    if (ff_dnn_fill_gettingoutput_task(&task, &exec_params, ov_model, input_height, input_width, ctx) != DNN_SUCCESS) {
         return DNN_ERROR;
     }
-    in_frame->width = input_width;
-    in_frame->height = input_height;
-
-    out_frame = av_frame_alloc();
-    if (!out_frame) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate memory for output frame\n");
-        av_frame_free(&in_frame);
-        return DNN_ERROR;
-    }
-
-    task.do_ioproc = 0;
-    task.async = 0;
-    task.input_name = input_name;
-    task.in_frame = in_frame;
-    task.output_names = &output_name;
-    task.out_frame = out_frame;
-    task.nb_output = 1;
-    task.model = ov_model;
 
     if (extract_inference_from_task(ov_model->model->func_type, &task, ov_model->inference_queue, NULL) != DNN_SUCCESS) {
-        av_frame_free(&out_frame);
-        av_frame_free(&in_frame);
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        return DNN_ERROR;
+        ret = DNN_ERROR;
+        goto err;
     }
 
     request = ff_safe_queue_pop_front(ov_model->request_queue);
     if (!request) {
-        av_frame_free(&out_frame);
-        av_frame_free(&in_frame);
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        ret = DNN_ERROR;
+        goto err;
     }
 
     ret = execute_model_ov(request, ov_model->inference_queue);
-    *output_width = out_frame->width;
-    *output_height = out_frame->height;
-
-    av_frame_free(&out_frame);
-    av_frame_free(&in_frame);
+    *output_width = task.out_frame->width;
+    *output_height = task.out_frame->height;
+err:
+    av_frame_free(&task.out_frame);
+    av_frame_free(&task.in_frame);
     return ret;
 }
 
@@ -883,22 +865,7 @@ DNNReturnType ff_dnn_execute_model_async_ov(const DNNModel *model, DNNExecBasePa
 DNNAsyncStatusType ff_dnn_get_async_result_ov(const DNNModel *model, AVFrame **in, AVFrame **out)
 {
     OVModel *ov_model = model->model;
-    TaskItem *task = ff_queue_peek_front(ov_model->task_queue);
-
-    if (!task) {
-        return DAST_EMPTY_QUEUE;
-    }
-
-    if (task->inference_done != task->inference_todo) {
-        return DAST_NOT_READY;
-    }
-
-    *in = task->in_frame;
-    *out = task->out_frame;
-    ff_queue_pop_front(ov_model->task_queue);
-    av_freep(&task);
-
-    return DAST_SUCCESS;
+    return ff_dnn_get_async_result_common(ov_model->task_queue, in, out);
 }
 
 DNNReturnType ff_dnn_flush_ov(const DNNModel *model)
