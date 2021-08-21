@@ -331,7 +331,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     out->height = outlink->h;
 
     td.in = in, td.out = out;
-    ctx->internal->execute(ctx, super2xsai, &td, NULL, FFMIN(in->height, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, super2xsai, &td, NULL,
+                      FFMIN(in->height, ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -344,7 +345,6 @@ static const AVFilterPad super2xsai_inputs[] = {
         .config_props = config_input,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad super2xsai_outputs[] = {
@@ -353,7 +353,6 @@ static const AVFilterPad super2xsai_outputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_super2xsai = {
@@ -361,7 +360,7 @@ const AVFilter ff_vf_super2xsai = {
     .description   = NULL_IF_CONFIG_SMALL("Scale the input by 2x using the Super2xSaI pixel art algorithm."),
     .priv_size     = sizeof(Super2xSaIContext),
     .query_formats = query_formats,
-    .inputs        = super2xsai_inputs,
-    .outputs       = super2xsai_outputs,
+    FILTER_INPUTS(super2xsai_inputs),
+    FILTER_OUTPUTS(super2xsai_outputs),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

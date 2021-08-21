@@ -753,7 +753,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.in = in;
     td.out = out;
-    ctx->internal->execute(ctx, s->filter_slice[pl], &td, NULL, FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, s->filter_slice[pl], &td, NULL,
+                      FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 
     if (in != out)
         av_frame_free(&in);
@@ -784,7 +785,6 @@ static const AVFilterPad colorchannelmixer_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad colorchannelmixer_outputs[] = {
@@ -793,7 +793,6 @@ static const AVFilterPad colorchannelmixer_outputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_colorchannelmixer = {
@@ -803,8 +802,8 @@ const AVFilter ff_vf_colorchannelmixer = {
     .priv_class    = &colorchannelmixer_class,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = colorchannelmixer_inputs,
-    .outputs       = colorchannelmixer_outputs,
+    FILTER_INPUTS(colorchannelmixer_inputs),
+    FILTER_OUTPUTS(colorchannelmixer_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

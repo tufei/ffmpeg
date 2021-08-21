@@ -146,7 +146,8 @@ static int blend_frames(AVFilterContext *ctx, int interpolate)
         av_frame_copy_props(s->work, s->f0);
 
         ff_dlog(ctx, "blend_frames() INTERPOLATE to create work frame\n");
-        ctx->internal->execute(ctx, filter_slice, &td, NULL, FFMIN(FFMAX(1, outlink->h >> 2), ff_filter_get_nb_threads(ctx)));
+        ff_filter_execute(ctx, filter_slice, &td, NULL,
+                          FFMIN(FFMAX(1, outlink->h >> 2), ff_filter_get_nb_threads(ctx)));
         return 1;
     }
     return 0;
@@ -426,7 +427,6 @@ static const AVFilterPad framerate_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad framerate_outputs[] = {
@@ -435,7 +435,6 @@ static const AVFilterPad framerate_outputs[] = {
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_framerate = {
@@ -446,8 +445,8 @@ const AVFilter ff_vf_framerate = {
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = framerate_inputs,
-    .outputs       = framerate_outputs,
+    FILTER_INPUTS(framerate_inputs),
+    FILTER_OUTPUTS(framerate_outputs),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
     .activate      = activate,
 };

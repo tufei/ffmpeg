@@ -221,8 +221,8 @@ static int process_frame(FFFrameSync *fs)
         td.f2 = f2;
         td.dst = out;
 
-        ctx->internal->execute(ctx, maskedminmax_slice, &td, NULL, FFMIN(s->planeheight[0],
-                                                                   ff_filter_get_nb_threads(ctx)));
+        ff_filter_execute(ctx, maskedminmax_slice, &td, NULL,
+                          FFMIN(s->planeheight[0], ff_filter_get_nb_threads(ctx)));
     }
     out->pts = av_rescale_q(s->fs.pts, s->fs.time_base, outlink->time_base);
 
@@ -313,7 +313,6 @@ static const AVFilterPad maskedminmax_inputs[] = {
         .name         = "filter2",
         .type         = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 static const AVFilterPad maskedminmax_outputs[] = {
@@ -322,7 +321,6 @@ static const AVFilterPad maskedminmax_outputs[] = {
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 #define maskedmin_options maskedminmax_options
@@ -337,8 +335,8 @@ const AVFilter ff_vf_maskedmin = {
     .uninit        = uninit,
     .activate      = activate,
     .query_formats = query_formats,
-    .inputs        = maskedminmax_inputs,
-    .outputs       = maskedminmax_outputs,
+    FILTER_INPUTS(maskedminmax_inputs),
+    FILTER_OUTPUTS(maskedminmax_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };
@@ -355,8 +353,8 @@ const AVFilter ff_vf_maskedmax = {
     .uninit        = uninit,
     .activate      = activate,
     .query_formats = query_formats,
-    .inputs        = maskedminmax_inputs,
-    .outputs       = maskedminmax_outputs,
+    FILTER_INPUTS(maskedminmax_inputs),
+    FILTER_OUTPUTS(maskedminmax_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

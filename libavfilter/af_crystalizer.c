@@ -398,8 +398,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.channels = in->channels;
     td.mult = ctx->is_disabled ? 0.f : s->mult;
     td.clip = s->clip;
-    ctx->internal->execute(ctx, s->filter, &td, NULL, FFMIN(inlink->channels,
-                                                            ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, s->filter, &td, NULL,
+                      FFMIN(inlink->channels, ff_filter_get_nb_threads(ctx)));
 
     if (out != in)
         av_frame_free(&in);
@@ -433,7 +433,6 @@ static const AVFilterPad inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -441,7 +440,6 @@ static const AVFilterPad outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_crystalizer = {
@@ -451,8 +449,8 @@ const AVFilter ff_af_crystalizer = {
     .priv_size      = sizeof(CrystalizerContext),
     .priv_class     = &crystalizer_class,
     .uninit         = uninit,
-    .inputs         = inputs,
-    .outputs        = outputs,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
     .process_command = process_command,
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                       AVFILTER_FLAG_SLICE_THREADS,

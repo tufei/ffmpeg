@@ -553,7 +553,7 @@ static av_cold int init(AVFilterContext *ctx)
         if (!pad.name)
             return AVERROR(ENOMEM);
 
-        if ((ret = ff_insert_inpad(ctx, i, &pad)) < 0) {
+        if ((ret = ff_append_inpad(ctx, &pad)) < 0) {
             av_freep(&pad.name);
             return ret;
         }
@@ -634,7 +634,6 @@ static const AVFilterPad avfilter_af_amix_outputs[] = {
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_amix = {
@@ -647,7 +646,7 @@ const AVFilter ff_af_amix = {
     .activate       = activate,
     .query_formats  = query_formats,
     .inputs         = NULL,
-    .outputs        = avfilter_af_amix_outputs,
+    FILTER_OUTPUTS(avfilter_af_amix_outputs),
     .process_command = process_command,
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

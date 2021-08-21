@@ -441,8 +441,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.in = in;
     td.out = out;
-    ctx->internal->execute(ctx, funcs[s->is_16bit][direct][s->correction_method],
-                           &td, NULL, FFMIN(inlink->h, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, funcs[s->is_16bit][direct][s->correction_method],
+                      &td, NULL, FFMIN(inlink->h, ff_filter_get_nb_threads(ctx)));
 
     if (!direct)
         av_frame_free(&in);
@@ -456,7 +456,6 @@ static const AVFilterPad selectivecolor_inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad selectivecolor_outputs[] = {
@@ -464,7 +463,6 @@ static const AVFilterPad selectivecolor_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_selectivecolor = {
@@ -472,8 +470,8 @@ const AVFilter ff_vf_selectivecolor = {
     .description   = NULL_IF_CONFIG_SMALL("Apply CMYK adjustments to specific color ranges."),
     .priv_size     = sizeof(SelectiveColorContext),
     .query_formats = query_formats,
-    .inputs        = selectivecolor_inputs,
-    .outputs       = selectivecolor_outputs,
+    FILTER_INPUTS(selectivecolor_inputs),
+    FILTER_OUTPUTS(selectivecolor_outputs),
     .priv_class    = &selectivecolor_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

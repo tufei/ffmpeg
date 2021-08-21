@@ -1401,7 +1401,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.in  = in;
     td.out = out;
-    ctx->internal->execute(ctx, s->iir_channel, &td, NULL, outlink->channels);
+    ff_filter_execute(ctx, s->iir_channel, &td, NULL, outlink->channels);
 
     for (ch = 0; ch < outlink->channels; ch++) {
         if (s->iir[ch].clippings > 0)
@@ -1473,7 +1473,7 @@ static av_cold int init(AVFilterContext *ctx)
         .config_props = config_output,
     };
 
-    ret = ff_insert_outpad(ctx, 0, &pad);
+    ret = ff_append_outpad(ctx, &pad);
     if (ret < 0)
         return ret;
 
@@ -1484,7 +1484,7 @@ static av_cold int init(AVFilterContext *ctx)
             .config_props = config_video,
         };
 
-        ret = ff_insert_outpad(ctx, 1, &vpad);
+        ret = ff_append_outpad(ctx, &vpad);
         if (ret < 0)
             return ret;
     }
@@ -1518,7 +1518,6 @@ static const AVFilterPad inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 #define OFFSET(x) offsetof(AudioIIRContext, x)
@@ -1574,7 +1573,7 @@ const AVFilter ff_af_aiir = {
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = inputs,
+    FILTER_INPUTS(inputs),
     .flags         = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
                      AVFILTER_FLAG_SLICE_THREADS,
 };

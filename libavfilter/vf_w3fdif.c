@@ -504,7 +504,8 @@ static int filter(AVFilterContext *ctx, int is_second)
 
     adj = s->field ? s->next : s->prev;
     td.out = out; td.cur = s->cur; td.adj = adj;
-    ctx->internal->execute(ctx, deinterlace_slice, &td, NULL, FFMIN(s->planeheight[1], s->nb_threads));
+    ff_filter_execute(ctx, deinterlace_slice, &td, NULL,
+                      FFMIN(s->planeheight[1], s->nb_threads));
 
     if (s->mode)
         s->field = !s->field;
@@ -597,7 +598,6 @@ static const AVFilterPad w3fdif_inputs[] = {
         .filter_frame  = filter_frame,
         .config_props  = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad w3fdif_outputs[] = {
@@ -607,7 +607,6 @@ static const AVFilterPad w3fdif_outputs[] = {
         .config_props  = config_output,
         .request_frame = request_frame,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_w3fdif = {
@@ -617,8 +616,8 @@ const AVFilter ff_vf_w3fdif = {
     .priv_class    = &w3fdif_class,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = w3fdif_inputs,
-    .outputs       = w3fdif_outputs,
+    FILTER_INPUTS(w3fdif_inputs),
+    FILTER_OUTPUTS(w3fdif_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

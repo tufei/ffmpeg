@@ -604,9 +604,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     td.temp_afft = s->temp_afft;
 
     if (s->type == TIME_DOMAIN) {
-        ctx->internal->execute(ctx, sofalizer_convolute, &td, NULL, 2);
+        ff_filter_execute(ctx, sofalizer_convolute, &td, NULL, 2);
     } else if (s->type == FREQUENCY_DOMAIN) {
-        ctx->internal->execute(ctx, sofalizer_fast_convolute, &td, NULL, 2);
+        ff_filter_execute(ctx, sofalizer_fast_convolute, &td, NULL, 2);
     }
     emms_c();
 
@@ -1095,7 +1095,6 @@ static const AVFilterPad inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -1103,7 +1102,6 @@ static const AVFilterPad outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_sofalizer = {
@@ -1115,7 +1113,7 @@ const AVFilter ff_af_sofalizer = {
     .activate      = activate,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = inputs,
-    .outputs       = outputs,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

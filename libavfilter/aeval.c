@@ -30,6 +30,7 @@
 #include "libavutil/parseutils.h"
 #include "avfilter.h"
 #include "audio.h"
+#include "filters.h"
 #include "internal.h"
 
 static const char * const var_names[] = {
@@ -259,21 +260,27 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_samplerates_from_list(ctx, sample_rates);
 }
 
-static int request_frame(AVFilterLink *outlink)
+static int activate(AVFilterContext *ctx)
 {
+    AVFilterLink *outlink = ctx->outputs[0];
     EvalContext *eval = outlink->src->priv;
     AVFrame *samplesref;
     int i, j;
     int64_t t = av_rescale(eval->n, AV_TIME_BASE, eval->sample_rate);
     int nb_samples;
 
+    if (!ff_outlink_frame_wanted(outlink))
+        return FFERROR_NOT_READY;
+
     if (eval->duration >= 0 && t >= eval->duration)
         return AVERROR_EOF;
 
     if (eval->duration >= 0) {
         nb_samples = FFMIN(eval->nb_samples, av_rescale(eval->duration, eval->sample_rate, AV_TIME_BASE) - eval->pts);
-        if (!nb_samples)
-            return AVERROR_EOF;
+        if (!nb_samples) {
+            ff_outlink_set_status(outlink, AVERROR_EOF, eval->pts);
+            return 0;
+        }
     } else {
         nb_samples = eval->nb_samples;
     }
@@ -305,9 +312,7 @@ static const AVFilterPad aevalsrc_outputs[] = {
         .name          = "default",
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = config_props,
-        .request_frame = request_frame,
     },
-    { NULL }
 };
 
 const AVFilter ff_asrc_aevalsrc = {
@@ -316,9 +321,10 @@ const AVFilter ff_asrc_aevalsrc = {
     .query_formats = query_formats,
     .init          = init,
     .uninit        = uninit,
+    .activate      = activate,
     .priv_size     = sizeof(EvalContext),
     .inputs        = NULL,
-    .outputs       = aevalsrc_outputs,
+    FILTER_OUTPUTS(aevalsrc_outputs),
     .priv_class    = &aevalsrc_class,
 };
 
@@ -445,7 +451,6 @@ static const AVFilterPad aeval_inputs[] = {
         .type           = AVMEDIA_TYPE_AUDIO,
         .filter_frame   = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad aeval_outputs[] = {
@@ -454,7 +459,6 @@ static const AVFilterPad aeval_outputs[] = {
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = aeval_config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_aeval = {
@@ -464,8 +468,8 @@ const AVFilter ff_af_aeval = {
     .init          = init,
     .uninit        = uninit,
     .priv_size     = sizeof(EvalContext),
-    .inputs        = aeval_inputs,
-    .outputs       = aeval_outputs,
+    FILTER_INPUTS(aeval_inputs),
+    FILTER_OUTPUTS(aeval_outputs),
     .priv_class    = &aeval_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

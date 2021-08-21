@@ -164,7 +164,8 @@ static int apply_unsharp_c(AVFilterContext *ctx, AVFrame *in, AVFrame *out)
         td.height = plane_h[i];
         td.dst_stride = out->linesize[i];
         td.src_stride = in->linesize[i];
-        ctx->internal->execute(ctx, s->unsharp_slice, &td, NULL, FFMIN(plane_h[i], s->nb_threads));
+        ff_filter_execute(ctx, s->unsharp_slice, &td, NULL,
+                          FFMIN(plane_h[i], s->nb_threads));
     }
     return 0;
 }
@@ -342,7 +343,6 @@ static const AVFilterPad avfilter_vf_unsharp_inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad avfilter_vf_unsharp_outputs[] = {
@@ -350,7 +350,6 @@ static const AVFilterPad avfilter_vf_unsharp_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_unsharp = {
@@ -361,7 +360,7 @@ const AVFilter ff_vf_unsharp = {
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = avfilter_vf_unsharp_inputs,
-    .outputs       = avfilter_vf_unsharp_outputs,
+    FILTER_INPUTS(avfilter_vf_unsharp_inputs),
+    FILTER_OUTPUTS(avfilter_vf_unsharp_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

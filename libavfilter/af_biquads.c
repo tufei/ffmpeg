@@ -797,7 +797,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
     td.in = buf;
     td.out = out_buf;
-    ctx->internal->execute(ctx, filter_channel, &td, NULL, FFMIN(outlink->channels, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, filter_channel, &td, NULL,
+                      FFMIN(outlink->channels, ff_filter_get_nb_threads(ctx)));
 
     for (ch = 0; ch < outlink->channels; ch++) {
         if (s->cache[ch].clippings > 0)
@@ -838,7 +839,6 @@ static const AVFilterPad inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -847,7 +847,6 @@ static const AVFilterPad outputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_output,
     },
-    { NULL }
 };
 
 #define OFFSET(x) offsetof(BiquadsContext, x)
@@ -870,8 +869,8 @@ const AVFilter ff_af_##name_ = {                               \
     .init          = name_##_init,                       \
     .uninit        = uninit,                             \
     .query_formats = query_formats,                      \
-    .inputs        = inputs,                             \
-    .outputs       = outputs,                            \
+    FILTER_INPUTS(inputs),                               \
+    FILTER_OUTPUTS(outputs),                             \
     .priv_class    = &name_##_class,                     \
     .process_command = process_command,                  \
     .flags         = AVFILTER_FLAG_SLICE_THREADS | AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL, \

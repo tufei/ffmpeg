@@ -745,7 +745,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             .src = s->cbuf[0][plane],
             .dst = s->cbuf[1][plane],
         };
-        ctx->internal->execute(ctx, filter_slice, &td, NULL, s->nb_threads);
+        ff_filter_execute(ctx, filter_slice, &td, NULL, s->nb_threads);
     }
     s->color_correlation(out->data, out->linesize[0],
                          s->cbuf[1], s->p_linesize,
@@ -811,7 +811,6 @@ static const AVFilterPad dctdnoiz_inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad dctdnoiz_outputs[] = {
@@ -819,7 +818,6 @@ static const AVFilterPad dctdnoiz_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_dctdnoiz = {
@@ -829,8 +827,8 @@ const AVFilter ff_vf_dctdnoiz = {
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = dctdnoiz_inputs,
-    .outputs       = dctdnoiz_outputs,
+    FILTER_INPUTS(dctdnoiz_inputs),
+    FILTER_OUTPUTS(dctdnoiz_outputs),
     .priv_class    = &dctdnoiz_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

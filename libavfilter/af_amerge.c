@@ -328,7 +328,7 @@ static av_cold int init(AVFilterContext *ctx)
         };
         if (!name)
             return AVERROR(ENOMEM);
-        if ((ret = ff_insert_inpad(ctx, i, &pad)) < 0) {
+        if ((ret = ff_append_inpad(ctx, &pad)) < 0) {
             av_freep(&pad.name);
             return ret;
         }
@@ -342,7 +342,6 @@ static const AVFilterPad amerge_outputs[] = {
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_amerge = {
@@ -355,7 +354,7 @@ const AVFilter ff_af_amerge = {
     .query_formats = query_formats,
     .activate      = activate,
     .inputs        = NULL,
-    .outputs       = amerge_outputs,
+    FILTER_OUTPUTS(amerge_outputs),
     .priv_class    = &amerge_class,
     .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

@@ -249,7 +249,8 @@ static void filter(AVFilterContext *ctx, AVFrame *dstpic,
         td.h       = h;
         td.plane   = i;
 
-        ctx->internal->execute(ctx, filter_slice, &td, NULL, FFMIN(h, ff_filter_get_nb_threads(ctx)));
+        ff_filter_execute(ctx, filter_slice, &td, NULL,
+                          FFMIN(h, ff_filter_get_nb_threads(ctx)));
     }
 
     emms_c();
@@ -336,7 +337,6 @@ static const AVFilterPad avfilter_vf_yadif_inputs[] = {
         .type          = AVMEDIA_TYPE_VIDEO,
         .filter_frame  = ff_yadif_filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad avfilter_vf_yadif_outputs[] = {
@@ -346,7 +346,6 @@ static const AVFilterPad avfilter_vf_yadif_outputs[] = {
         .request_frame = ff_yadif_request_frame,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_yadif = {
@@ -356,7 +355,7 @@ const AVFilter ff_vf_yadif = {
     .priv_class    = &yadif_class,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = avfilter_vf_yadif_inputs,
-    .outputs       = avfilter_vf_yadif_outputs,
+    FILTER_INPUTS(avfilter_vf_yadif_inputs),
+    FILTER_OUTPUTS(avfilter_vf_yadif_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };

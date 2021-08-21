@@ -101,18 +101,16 @@ void ff_command_queue_pop(AVFilterContext *filter)
     av_free(c);
 }
 
-int ff_insert_pad(unsigned idx, unsigned *count, size_t padidx_off,
+int ff_append_pad(unsigned *count,
                    AVFilterPad **pads, AVFilterLink ***links,
                    AVFilterPad *newpad)
 {
     AVFilterLink **newlinks;
     AVFilterPad *newpads;
-    unsigned i;
+    unsigned idx = *count;
 
-    idx = FFMIN(idx, *count);
-
-    newpads  = av_realloc_array(*pads,  *count + 1, sizeof(AVFilterPad));
-    newlinks = av_realloc_array(*links, *count + 1, sizeof(AVFilterLink*));
+    newpads  = av_realloc_array(*pads,  idx + 1, sizeof(*newpads));
+    newlinks = av_realloc_array(*links, idx + 1, sizeof(*newlinks));
     if (newpads)
         *pads  = newpads;
     if (newlinks)
@@ -120,15 +118,10 @@ int ff_insert_pad(unsigned idx, unsigned *count, size_t padidx_off,
     if (!newpads || !newlinks)
         return AVERROR(ENOMEM);
 
-    memmove(*pads  + idx + 1, *pads  + idx, sizeof(AVFilterPad)   * (*count - idx));
-    memmove(*links + idx + 1, *links + idx, sizeof(AVFilterLink*) * (*count - idx));
     memcpy(*pads + idx, newpad, sizeof(AVFilterPad));
     (*links)[idx] = NULL;
 
     (*count)++;
-    for (i = idx + 1; i < *count; i++)
-        if ((*links)[i])
-            (*(unsigned *)((uint8_t *) (*links)[i] + padidx_off))++;
 
     return 0;
 }
@@ -545,16 +538,29 @@ int avfilter_process_command(AVFilterContext *filter, const char *cmd, const cha
     return AVERROR(ENOSYS);
 }
 
+#if FF_API_PAD_COUNT
 int avfilter_pad_count(const AVFilterPad *pads)
 {
-    int count;
+    const AVFilter *filter;
+    void *opaque = NULL;
 
     if (!pads)
         return 0;
 
-    for (count = 0; pads->name; count++)
-        pads++;
-    return count;
+    while (filter = av_filter_iterate(&opaque)) {
+        if (pads == filter->inputs)
+            return filter->nb_inputs;
+        if (pads == filter->outputs)
+            return filter->nb_outputs;
+    }
+
+    av_assert0(!"AVFilterPad list not from a filter");
+}
+#endif
+
+unsigned avfilter_filter_pad_count(const AVFilter *filter, int is_output)
+{
+    return is_output ? filter->nb_outputs : filter->nb_inputs;
 }
 
 static const char *default_filter_name(void *filter_ctx)
@@ -657,7 +663,7 @@ AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name)
         goto err;
     ret->internal->execute = default_execute;
 
-    ret->nb_inputs = avfilter_pad_count(filter->inputs);
+    ret->nb_inputs  = filter->nb_inputs;
     if (ret->nb_inputs ) {
         ret->input_pads   = av_memdup(filter->inputs,  ret->nb_inputs  * sizeof(*filter->inputs));
         if (!ret->input_pads)
@@ -667,7 +673,7 @@ AVFilterContext *ff_filter_alloc(const AVFilter *filter, const char *inst_name)
             goto err;
     }
 
-    ret->nb_outputs = avfilter_pad_count(filter->outputs);
+    ret->nb_outputs = filter->nb_outputs;
     if (ret->nb_outputs) {
         ret->output_pads  = av_memdup(filter->outputs, ret->nb_outputs * sizeof(*filter->outputs));
         if (!ret->output_pads)
@@ -877,9 +883,7 @@ int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
         }
     }
 
-    if (ctx->filter->init_opaque)
-        ret = ctx->filter->init_opaque(ctx, NULL);
-    else if (ctx->filter->init)
+    if (ctx->filter->init)
         ret = ctx->filter->init(ctx);
     else if (ctx->filter->init_dict)
         ret = ctx->filter->init_dict(ctx, options);
@@ -952,7 +956,7 @@ static int ff_filter_frame_framed(AVFilterLink *link, AVFrame *frame)
     if (!(filter_frame = dst->filter_frame))
         filter_frame = default_filter_frame;
 
-    if (dst->needs_writable) {
+    if (dst->flags & AVFILTERPAD_FLAG_NEEDS_WRITABLE) {
         ret = ff_inlink_make_frame_writable(link, &frame);
         if (ret < 0)
             goto fail;
@@ -1070,7 +1074,6 @@ static int take_samples(AVFilterLink *link, unsigned min, unsigned max,
         av_frame_free(&buf);
         return ret;
     }
-    buf->pts = frame0->pts;
 
     p = 0;
     for (i = 0; i < nb_frames; i++) {

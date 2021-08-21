@@ -422,9 +422,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     av_frame_copy_props(out, in);
 
     td.in = in; td.out = out;
-    ctx->internal->execute(ctx, s->deband, &td, NULL, FFMIN3(s->planeheight[1],
-                                                             s->planeheight[2],
-                                                             ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, s->deband, &td, NULL,
+                      FFMIN3(s->planeheight[1], s->planeheight[2],
+                             ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -456,7 +456,6 @@ static const AVFilterPad avfilter_vf_deband_inputs[] = {
         .config_props = config_input,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad avfilter_vf_deband_outputs[] = {
@@ -464,7 +463,6 @@ static const AVFilterPad avfilter_vf_deband_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_deband = {
@@ -474,8 +472,8 @@ const AVFilter ff_vf_deband = {
     .priv_class    = &deband_class,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = avfilter_vf_deband_inputs,
-    .outputs       = avfilter_vf_deband_outputs,
+    FILTER_INPUTS(avfilter_vf_deband_inputs),
+    FILTER_OUTPUTS(avfilter_vf_deband_outputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

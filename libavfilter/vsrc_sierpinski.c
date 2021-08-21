@@ -191,7 +191,8 @@ static void draw_sierpinski(AVFilterContext *ctx, AVFrame *frame)
             s->pos_y--;
     }
 
-    ctx->internal->execute(ctx, s->draw_slice, frame, NULL, FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, s->draw_slice, frame, NULL,
+                      FFMIN(outlink->h, ff_filter_get_nb_threads(ctx)));
 }
 
 static int sierpinski_request_frame(AVFilterLink *link)
@@ -217,7 +218,6 @@ static const AVFilterPad sierpinski_outputs[] = {
         .request_frame = sierpinski_request_frame,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vsrc_sierpinski = {
@@ -227,6 +227,6 @@ const AVFilter ff_vsrc_sierpinski = {
     .priv_class    = &sierpinski_class,
     .query_formats = query_formats,
     .inputs        = NULL,
-    .outputs       = sierpinski_outputs,
+    FILTER_OUTPUTS(sierpinski_outputs),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

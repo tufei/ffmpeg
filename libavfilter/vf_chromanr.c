@@ -208,10 +208,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     av_frame_copy_props(out, in);
     s->out = out;
-    ctx->internal->execute(ctx, s->filter_slice, in, NULL,
-                           FFMIN3(s->planeheight[1],
-                                  s->planeheight[2],
-                                  ff_filter_get_nb_threads(ctx)));
+    ff_filter_execute(ctx, s->filter_slice, in, NULL,
+                      FFMIN3(s->planeheight[1],
+                             s->planeheight[2],
+                             ff_filter_get_nb_threads(ctx)));
 
     av_frame_free(&in);
     return ff_filter_frame(outlink, out);
@@ -264,7 +264,6 @@ static const AVFilterPad inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -272,7 +271,6 @@ static const AVFilterPad outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 AVFILTER_DEFINE_CLASS(chromanr);
@@ -283,8 +281,8 @@ const AVFilter ff_vf_chromanr = {
     .priv_size     = sizeof(ChromaNRContext),
     .priv_class    = &chromanr_class,
     .query_formats = query_formats,
-    .outputs       = outputs,
-    .inputs        = inputs,
+    FILTER_OUTPUTS(outputs),
+    FILTER_INPUTS(inputs),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

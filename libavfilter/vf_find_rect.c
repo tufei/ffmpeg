@@ -225,8 +225,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     snprintf(buf, sizeof(buf), "%f", best_score);
 
-    av_frame_make_writable(in);
-
     av_dict_set_int(&in->metadata, "lavfi.rect.w", foc->obj_frame->width, 0);
     av_dict_set_int(&in->metadata, "lavfi.rect.h", foc->obj_frame->height, 0);
     av_dict_set_int(&in->metadata, "lavfi.rect.x", best_x, 0);
@@ -292,7 +290,6 @@ static const AVFilterPad foc_inputs[] = {
         .config_props = config_input,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad foc_outputs[] = {
@@ -300,7 +297,6 @@ static const AVFilterPad foc_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_find_rect = {
@@ -310,7 +306,7 @@ const AVFilter ff_vf_find_rect = {
     .init            = init,
     .uninit          = uninit,
     .query_formats   = query_formats,
-    .inputs          = foc_inputs,
-    .outputs         = foc_outputs,
+    FILTER_INPUTS(foc_inputs),
+    FILTER_OUTPUTS(foc_outputs),
     .priv_class      = &find_rect_class,
 };

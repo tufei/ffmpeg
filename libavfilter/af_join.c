@@ -194,7 +194,7 @@ static av_cold int join_init(AVFilterContext *ctx)
         if (!pad.name)
             return AVERROR(ENOMEM);
 
-        if ((ret = ff_insert_inpad(ctx, i, &pad)) < 0) {
+        if ((ret = ff_append_inpad(ctx, &pad)) < 0) {
             av_freep(&pad.name);
             return ret;
         }
@@ -536,7 +536,6 @@ static const AVFilterPad avfilter_af_join_outputs[] = {
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = join_config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_join = {
@@ -550,6 +549,6 @@ const AVFilter ff_af_join = {
     .activate       = activate,
     .query_formats  = join_query_formats,
     .inputs         = NULL,
-    .outputs        = avfilter_af_join_outputs,
+    FILTER_OUTPUTS(avfilter_af_join_outputs),
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };
