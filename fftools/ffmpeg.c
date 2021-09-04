@@ -653,6 +653,7 @@ static void ffmpeg_cleanup(int ret)
                    av_err2str(AVERROR(errno)));
     }
     av_freep(&vstats_filename);
+    av_freep(&filter_nbthreads);
 
     av_freep(&input_streams);
     av_freep(&input_files);
@@ -4926,7 +4927,6 @@ static int transcode(void)
                 av_dict_free(&ost->encoder_opts);
                 av_dict_free(&ost->sws_dict);
                 av_dict_free(&ost->swr_opts);
-                av_dict_free(&ost->resample_opts);
             }
         }
     }

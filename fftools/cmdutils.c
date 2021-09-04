@@ -68,7 +68,7 @@ static int init_report(const char *env);
 
 AVDictionary *sws_dict;
 AVDictionary *swr_opts;
-AVDictionary *format_opts, *codec_opts, *resample_opts;
+AVDictionary *format_opts, *codec_opts;
 
 static FILE *report_file;
 static int report_file_level = AV_LOG_DEBUG;
@@ -86,7 +86,6 @@ void uninit_opts(void)
     av_dict_free(&sws_dict);
     av_dict_free(&format_opts);
     av_dict_free(&codec_opts);
-    av_dict_free(&resample_opts);
 }
 
 void log_callback_help(void *ptr, int level, const char *fmt, va_list vl)
@@ -657,11 +656,9 @@ static void finish_group(OptionParseContext *octx, int group_idx,
     g->swr_opts    = swr_opts;
     g->codec_opts  = codec_opts;
     g->format_opts = format_opts;
-    g->resample_opts = resample_opts;
 
     codec_opts  = NULL;
     format_opts = NULL;
-    resample_opts = NULL;
     sws_dict    = NULL;
     swr_opts    = NULL;
 
@@ -714,7 +711,6 @@ void uninit_parse_context(OptionParseContext *octx)
             av_freep(&l->groups[j].opts);
             av_dict_free(&l->groups[j].codec_opts);
             av_dict_free(&l->groups[j].format_opts);
-            av_dict_free(&l->groups[j].resample_opts);
 
             av_dict_free(&l->groups[j].sws_dict);
             av_dict_free(&l->groups[j].swr_opts);
@@ -826,7 +822,7 @@ do {                                                                           \
         return AVERROR_OPTION_NOT_FOUND;
     }
 
-    if (octx->cur_group.nb_opts || codec_opts || format_opts || resample_opts)
+    if (octx->cur_group.nb_opts || codec_opts || format_opts)
         av_log(NULL, AV_LOG_WARNING, "Trailing option(s) found in the "
                "command: may be ignored.\n");
 
@@ -853,7 +849,7 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg)
     int count;
 
     static const AVOption opts[] = {
-        {"count", NULL, 0, AV_OPT_TYPE_INT, { .i64 = -1}, -1, INT_MAX, NULL},
+        {"count", NULL, 0, AV_OPT_TYPE_INT, { .i64 = -1}, -1, INT_MAX},
         {NULL},
     };
     static const AVClass class = {
@@ -2234,19 +2230,13 @@ static int print_device_sources(const AVInputFormat *fmt, AVDictionary *opts)
         return AVERROR(EINVAL);
 
     printf("Auto-detected sources for %s:\n", fmt->name);
-    if (!fmt->get_device_list) {
-        ret = AVERROR(ENOSYS);
-        printf("Cannot list sources. Not implemented.\n");
-        goto fail;
-    }
-
     if ((ret = avdevice_list_input_sources(fmt, NULL, opts, &device_list)) < 0) {
-        printf("Cannot list sources.\n");
+        printf("Cannot list sources: %s\n", av_err2str(ret));
         goto fail;
     }
 
     for (i = 0; i < device_list->nb_devices; i++) {
-        printf("%s %s [%s]\n", device_list->default_device == i ? "*" : " ",
+        printf("%c %s [%s]\n", device_list->default_device == i ? '*' : ' ',
                device_list->devices[i]->device_name, device_list->devices[i]->device_description);
     }
 
@@ -2264,19 +2254,13 @@ static int print_device_sinks(const AVOutputFormat *fmt, AVDictionary *opts)
         return AVERROR(EINVAL);
 
     printf("Auto-detected sinks for %s:\n", fmt->name);
-    if (!fmt->get_device_list) {
-        ret = AVERROR(ENOSYS);
-        printf("Cannot list sinks. Not implemented.\n");
-        goto fail;
-    }
-
     if ((ret = avdevice_list_output_sinks(fmt, NULL, opts, &device_list)) < 0) {
-        printf("Cannot list sinks.\n");
+        printf("Cannot list sinks: %s\n", av_err2str(ret));
         goto fail;
     }
 
     for (i = 0; i < device_list->nb_devices; i++) {
-        printf("%s %s [%s]\n", device_list->default_device == i ? "*" : " ",
+        printf("%c %s [%s]\n", device_list->default_device == i ? '*' : ' ',
                device_list->devices[i]->device_name, device_list->devices[i]->device_description);
     }
 
