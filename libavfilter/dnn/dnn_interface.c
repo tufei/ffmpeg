@@ -75,6 +75,8 @@ DNNModule *ff_get_dnn_module(DNNBackendType backend_type)
     #if (CONFIG_LIBONNXRUNTIME == 1)
         dnn_module->load_model = &ff_dnn_load_model_ort;
         dnn_module->execute_model = &ff_dnn_execute_model_ort;
+        dnn_module->get_result = &ff_dnn_get_result_ort;
+        dnn_module->flush = &ff_dnn_flush_ort;
         dnn_module->free_model = &ff_dnn_free_model_ort;
     #else
         av_freep(&dnn_module);
