@@ -812,7 +812,7 @@ static int process_options(AVFilterContext *ctx, AVDictionary **options,
                            const char *args)
 {
     const AVOption *o = NULL;
-    int ret, count = 0;
+    int ret;
     char *av_uninit(parsed_key), *av_uninit(value);
     const char *key;
     int offset= -1;
@@ -875,10 +875,9 @@ static int process_options(AVFilterContext *ctx, AVDictionary **options,
 
         av_free(value);
         av_free(parsed_key);
-        count++;
     }
 
-    return count;
+    return 0;
 }
 
 int ff_filter_process_command(AVFilterContext *ctx, const char *cmd,
@@ -925,6 +924,8 @@ int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
         ret = ctx->filter->init(ctx);
     else if (ctx->filter->init_dict)
         ret = ctx->filter->init_dict(ctx, options);
+    if (ret < 0)
+        return ret;
 
     if (ctx->enable_str) {
         ret = set_enable_expr(ctx, ctx->enable_str);
@@ -932,7 +933,7 @@ int avfilter_init_dict(AVFilterContext *ctx, AVDictionary **options)
             return ret;
     }
 
-    return ret;
+    return 0;
 }
 
 int avfilter_init_str(AVFilterContext *filter, const char *args)
