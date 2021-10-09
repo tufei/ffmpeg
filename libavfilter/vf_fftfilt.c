@@ -385,27 +385,22 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
 }
 
-static int query_formats(AVFilterContext *ctx)
-{
-    static const enum AVPixelFormat pixel_fmts_fftfilt[] = {
-        AV_PIX_FMT_GRAY8,
-        AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P,
-        AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVJ420P,
-        AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUVJ422P,
-        AV_PIX_FMT_YUV420P9, AV_PIX_FMT_YUV420P10,
-        AV_PIX_FMT_YUV420P12, AV_PIX_FMT_YUV420P14,
-        AV_PIX_FMT_YUV420P16,
-        AV_PIX_FMT_YUV422P9, AV_PIX_FMT_YUV422P10,
-        AV_PIX_FMT_YUV422P12, AV_PIX_FMT_YUV422P14,
-        AV_PIX_FMT_YUV422P16,
-        AV_PIX_FMT_YUV444P9, AV_PIX_FMT_YUV444P10,
-        AV_PIX_FMT_YUV444P12, AV_PIX_FMT_YUV444P14,
-        AV_PIX_FMT_YUV444P16,
-        AV_PIX_FMT_NONE
-    };
-
-    return ff_set_common_formats_from_list(ctx, pixel_fmts_fftfilt);
-}
+static const enum AVPixelFormat pixel_fmts_fftfilt[] = {
+    AV_PIX_FMT_GRAY8,
+    AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P,
+    AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVJ420P,
+    AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUVJ422P,
+    AV_PIX_FMT_YUV420P9, AV_PIX_FMT_YUV420P10,
+    AV_PIX_FMT_YUV420P12, AV_PIX_FMT_YUV420P14,
+    AV_PIX_FMT_YUV420P16,
+    AV_PIX_FMT_YUV422P9, AV_PIX_FMT_YUV422P10,
+    AV_PIX_FMT_YUV422P12, AV_PIX_FMT_YUV422P14,
+    AV_PIX_FMT_YUV422P16,
+    AV_PIX_FMT_YUV444P9, AV_PIX_FMT_YUV444P10,
+    AV_PIX_FMT_YUV444P12, AV_PIX_FMT_YUV444P14,
+    AV_PIX_FMT_YUV444P16,
+    AV_PIX_FMT_NONE
+};
 
 static const AVFilterPad fftfilt_inputs[] = {
     {
@@ -430,7 +425,7 @@ const AVFilter ff_vf_fftfilt = {
     .priv_class      = &fftfilt_class,
     FILTER_INPUTS(fftfilt_inputs),
     FILTER_OUTPUTS(fftfilt_outputs),
-    .query_formats   = query_formats,
+    FILTER_PIXFMTS_ARRAY(pixel_fmts_fftfilt),
     .init            = initialize,
     .uninit          = uninit,
     .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
