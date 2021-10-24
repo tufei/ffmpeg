@@ -25,9 +25,11 @@
 #include "rtpdec_formats.h"
 #include "libavutil/avstring.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/parseutils.h"
 
 struct PayloadContext {
     char *sampling;
+    AVRational framerate;
     int depth;
     int width;
     int height;
@@ -69,6 +71,11 @@ static int rfc4175_parse_format(AVStream *stream, PayloadContext *data)
     stream->codecpar->bits_per_coded_sample = av_get_bits_per_pixel(desc);
     data->frame_size = data->width * data->height * data->pgroup / data->xinc;
 
+    if (data->framerate.den > 0) {
+        stream->avg_frame_rate = data->framerate;
+        stream->codecpar->bit_rate = data->frame_size * av_q2d(data->framerate) * 8;
+    }
+
     return 0;
 }
 
@@ -84,6 +91,39 @@ static int rfc4175_parse_fmtp(AVFormatContext *s, AVStream *stream,
         data->sampling = av_strdup(value);
     else if (!strncmp(attr, "depth", 5))
         data->depth = atoi(value);
+    else if (!strncmp(attr, "exactframerate", 14)) {
+        if (av_parse_video_rate(&data->framerate, value) < 0)
+            return AVERROR(EINVAL);
+    } else if (!strncmp(attr, "TCS", 3)) {
+        if (!strncmp(value, "SDR", 3))
+            stream->codecpar->color_trc = AVCOL_TRC_BT709;
+        else if (!strncmp(value, "PQ", 2))
+            stream->codecpar->color_trc = AVCOL_TRC_SMPTE2084;
+        else if (!strncmp(value, "HLG", 3))
+            stream->codecpar->color_trc = AVCOL_TRC_ARIB_STD_B67;
+        else if (!strncmp(value, "LINEAR", 6))
+            stream->codecpar->color_trc = AVCOL_TRC_LINEAR;
+        else if (!strncmp(value, "ST428-1", 7))
+            stream->codecpar->color_trc = AVCOL_TRC_SMPTEST428_1;
+        else
+            stream->codecpar->color_trc = AVCOL_TRC_UNSPECIFIED;
+    } else if (!strncmp(attr, "colorimetry", 11)) {
+        if (!strncmp(value, "BT601", 5)) {
+            stream->codecpar->color_primaries = AVCOL_PRI_BT470BG;
+            stream->codecpar->color_space     = AVCOL_SPC_BT470BG;
+        } else if (!strncmp(value, "BT709", 5)) {
+            stream->codecpar->color_primaries = AVCOL_PRI_BT709;
+            stream->codecpar->color_space     = AVCOL_SPC_BT709;
+        } else if (!strncmp(value, "BT2020", 6)) {
+            stream->codecpar->color_primaries = AVCOL_PRI_BT2020;
+            stream->codecpar->color_space     = AVCOL_SPC_BT2020_NCL;
+        }
+    } else if (!strncmp(attr, "RANGE", 5)) {
+        if (!strncmp(value, "NARROW", 6))
+            stream->codecpar->color_range = AVCOL_RANGE_MPEG;
+        else if (!strncmp(value, "FULL", 4))
+            stream->codecpar->color_range = AVCOL_RANGE_JPEG;
+    }
 
     return 0;
 }
