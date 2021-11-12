@@ -1830,6 +1830,7 @@ EXTERNAL_LIBRARY_LIST="
     libopenmpt
     libopenvino
     libopus
+    libplacebo
     libpulse
     librabbitmq
     librav1e
@@ -3567,7 +3568,7 @@ ass_filter_deps="libass"
 atempo_filter_deps="avcodec"
 atempo_filter_select="rdft"
 avgblur_opencl_filter_deps="opencl"
-avgblur_vulkan_filter_deps="vulkan_lib libglslang"
+avgblur_vulkan_filter_deps="vulkan libglslang"
 azmq_filter_deps="libzmq"
 blackframe_filter_deps="gpl"
 bm3d_filter_deps="avcodec"
@@ -3575,7 +3576,7 @@ bm3d_filter_select="dct"
 boxblur_filter_deps="gpl"
 boxblur_opencl_filter_deps="opencl gpl"
 bs2b_filter_deps="libbs2b"
-chromaber_vulkan_filter_deps="vulkan_lib libglslang"
+chromaber_vulkan_filter_deps="vulkan libglslang"
 colorkey_opencl_filter_deps="opencl"
 colormatrix_filter_deps="gpl"
 convolution_opencl_filter_deps="opencl"
@@ -3621,6 +3622,7 @@ interlace_filter_deps="gpl"
 kerndeint_filter_deps="gpl"
 ladspa_filter_deps="ladspa libdl"
 lensfun_filter_deps="liblensfun version3"
+libplacebo_filter_deps="libplacebo vulkan libglslang"
 lv2_filter_deps="lv2"
 mcdeint_filter_deps="avcodec gpl"
 metadata_filter_deps="avformat"
@@ -3638,7 +3640,7 @@ openclsrc_filter_deps="opencl"
 overlay_opencl_filter_deps="opencl"
 overlay_qsv_filter_deps="libmfx"
 overlay_qsv_filter_select="qsvvpp"
-overlay_vulkan_filter_deps="vulkan_lib libglslang"
+overlay_vulkan_filter_deps="vulkan libglslang"
 owdenoise_filter_deps="gpl"
 pad_opencl_filter_deps="opencl"
 pan_filter_deps="swresample"
@@ -3701,7 +3703,7 @@ zmq_filter_deps="libzmq"
 zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg const_nan"
 scale_vaapi_filter_deps="vaapi"
-scale_vulkan_filter_deps="vulkan_lib libglslang"
+scale_vulkan_filter_deps="vulkan libglslang"
 vpp_qsv_filter_deps="libmfx"
 vpp_qsv_filter_select="qsvvpp"
 xfade_opencl_filter_deps="opencl"
@@ -6443,7 +6445,12 @@ enabled fontconfig        && enable libfontconfig
 enabled libfontconfig     && require_pkg_config libfontconfig fontconfig "fontconfig/fontconfig.h" FcInit
 enabled libfreetype       && require_pkg_config libfreetype freetype2 "ft2build.h FT_FREETYPE_H" FT_Init_FreeType
 enabled libfribidi        && require_pkg_config libfribidi fribidi fribidi.h fribidi_version_info
-enabled libglslang        && require_cpp libglslang glslang/SPIRV/GlslangToSpv.h "glslang::TIntermediate*" -lglslang -lMachineIndependent -lOSDependent -lHLSL -lOGLCompiler -lGenericCodeGen -lSPVRemapper -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lpthread -lstdc++
+enabled libglslang && { check_lib libglslang glslang/Include/glslang_c_interface.h glslang_initialize_process \
+                            -lglslang -lMachineIndependent -lOSDependent -lHLSL -lOGLCompiler -lGenericCodeGen \
+                            -lSPVRemapper -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lpthread -lstdc++ -lm ||
+                        require libglslang glslang/Include/glslang_c_interface.h glslang_initialize_process \
+                            -lglslang -lOSDependent -lHLSL -lOGLCompiler \
+                            -lSPVRemapper -lSPIRV -lSPIRV-Tools-opt -lSPIRV-Tools -lpthread -lstdc++ -lm; }
 enabled libgme            && { check_pkg_config libgme libgme gme/gme.h gme_new_emu ||
                                require libgme gme/gme.h gme_new_emu -lgme -lstdc++; }
 enabled libgsm            && { for gsm_hdr in "gsm.h" "gsm/gsm.h"; do
@@ -6492,6 +6499,7 @@ enabled libopus           && {
         require_pkg_config libopus opus opus_multistream.h opus_multistream_surround_encoder_create
     }
 }
+enabled libplacebo        && require_pkg_config libplacebo "libplacebo >= 4.173.0" libplacebo/vulkan.h pl_vulkan_create
 enabled libpulse          && require_pkg_config libpulse libpulse pulse/pulseaudio.h pa_context_new
 enabled librabbitmq       && require_pkg_config librabbitmq "librabbitmq >= 0.7.1" amqp.h amqp_new_connection
 enabled librav1e          && require_pkg_config librav1e "rav1e >= 0.4.0" rav1e.h rav1e_context_new
@@ -6828,10 +6836,8 @@ enabled vdpau &&
 enabled crystalhd && check_lib crystalhd "stdint.h libcrystalhd/libcrystalhd_if.h" DtsCrystalHDVersion -lcrystalhd
 
 if enabled vulkan; then
-    require_pkg_config_cpp vulkan "vulkan >= 1.1.97" "vulkan/vulkan.h" "defined VK_VERSION_1_1" ||
-        require_cpp_condition vulkan "vulkan/vulkan.h" "defined VK_VERSION_1_1"
-    # vulkan_lib should be removed once glslang filters are updated
-    check_pkg_config vulkan_lib "vulkan >= 1.1.97" "vulkan/vulkan.h" vkCreateInstance
+    require_pkg_config_cpp vulkan "vulkan >= 1.2.189" "vulkan/vulkan.h" "defined VK_VERSION_1_2" ||
+        require_cpp_condition vulkan "vulkan/vulkan.h" "defined VK_VERSION_1_2"
 fi
 
 if enabled x86; then

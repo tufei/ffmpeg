@@ -138,13 +138,22 @@ static int encode_nals(AVCodecContext *ctx, AVPacket *pkt,
 {
     X264Context *x4 = ctx->priv_data;
     uint8_t *p;
-    int i, size = x4->sei_size, ret;
+    uint64_t size = x4->sei_size;
+    int ret;
 
     if (!nnal)
         return 0;
 
-    for (i = 0; i < nnal; i++)
+    for (int i = 0; i < nnal; i++) {
         size += nals[i].i_payload;
+        /* ff_get_encode_buffer() accepts an int64_t and
+         * so we need to make sure that no overflow happens before
+         * that. With 32bit ints this is automatically true. */
+#if INT_MAX > INT64_MAX / INT_MAX - 1
+        if ((int64_t)size < 0)
+            return AVERROR(ERANGE);
+#endif
+    }
 
     if ((ret = ff_get_encode_buffer(ctx, pkt, size, 0)) < 0)
         return ret;
@@ -152,21 +161,17 @@ static int encode_nals(AVCodecContext *ctx, AVPacket *pkt,
     p = pkt->data;
 
     /* Write the SEI as part of the first frame. */
-    if (x4->sei_size > 0 && nnal > 0) {
-        if (x4->sei_size > size) {
-            av_log(ctx, AV_LOG_ERROR, "Error: nal buffer is too small\n");
-            return -1;
-        }
+    if (x4->sei_size > 0) {
         memcpy(p, x4->sei, x4->sei_size);
         p += x4->sei_size;
+        size -= x4->sei_size;
         x4->sei_size = 0;
         av_freep(&x4->sei);
     }
 
-    for (i = 0; i < nnal; i++){
-        memcpy(p, nals[i].p_payload, nals[i].i_payload);
-        p += nals[i].i_payload;
-    }
+    /* x264 guarantees the payloads of the NALs
+     * to be sequential in memory. */
+    memcpy(p, nals[0].p_payload, size);
 
     return 1;
 }

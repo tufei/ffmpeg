@@ -11717,6 +11717,18 @@ Allowed range is from 1 to 15.
 Specify the search radius for best edge matching. Default value is 2.
 Allowed range is from 0 to 15.
 
+@item ecost
+Specify the edge cost for edge matching. Default value is 0.03125.
+Allowed range is from 0 to 1.
+
+@item mcost
+Specify the middle cost for edge matching. Default value is 0.5.
+Allowed range is from 0 to 1.
+
+@item dcost
+Specify the distance cost for edge matching. Default value is 0.5.
+Allowed range is from 0 to 1.
+
 @item interp
 Specify the interpolation used. Default is 4-point interpolation. It accepts one
 of the following values:
@@ -28350,6 +28362,9 @@ changed, so it will generate non monotonically increasing timestamps.
 Specifies the time difference between frames above which the point is
 considered a timestamp discontinuity which is removed by adjusting the later
 timestamps.
+
+@item dec_threads
+Specifies the number of threads for decoding
 @end table
 
 It allows overlaying a second video on top of the main input of
