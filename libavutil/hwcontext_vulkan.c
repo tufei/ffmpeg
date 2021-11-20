@@ -21,6 +21,7 @@
 
 #ifdef _WIN32
 #include <windows.h> /* Included to prevent conflicts with CreateSemaphore */
+#include <versionhelpers.h>
 #include "compat/w32dlfcn.h"
 #else
 #include <dlfcn.h>
@@ -37,6 +38,7 @@
 #include "hwcontext_internal.h"
 #include "hwcontext_vulkan.h"
 
+#include "vulkan.h"
 #include "vulkan_loader.h"
 
 #if CONFIG_LIBDRM
@@ -123,14 +125,12 @@ typedef struct AVVkFrameInternal {
     CUmipmappedArray cu_mma[AV_NUM_DATA_POINTERS];
     CUarray cu_array[AV_NUM_DATA_POINTERS];
     CUexternalSemaphore cu_sem[AV_NUM_DATA_POINTERS];
-    int exp_sem[AV_NUM_DATA_POINTERS];
+#ifdef _WIN32
+    HANDLE ext_mem_handle[AV_NUM_DATA_POINTERS];
+    HANDLE ext_sem_handle[AV_NUM_DATA_POINTERS];
+#endif
 #endif
 } AVVkFrameInternal;
-
-#define DEFAULT_USAGE_FLAGS (VK_IMAGE_USAGE_SAMPLED_BIT      |                 \
-                             VK_IMAGE_USAGE_STORAGE_BIT      |                 \
-                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |                 \
-                             VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 
 #define ADD_VAL_TO_LIST(list, count, val)                                      \
     do {                                                                       \
@@ -247,7 +247,7 @@ static int pixfmt_is_supported(AVHWDeviceContext *dev_ctx, enum AVPixelFormat p,
         vk->GetPhysicalDeviceFormatProperties2(hwctx->phys_dev, fmt[i], &prop);
         flags = linear ? prop.formatProperties.linearTilingFeatures :
                          prop.formatProperties.optimalTilingFeatures;
-        if (!(flags & DEFAULT_USAGE_FLAGS))
+        if (!(flags & FF_VK_DEFAULT_USAGE_FLAGS))
             return 0;
     }
 
@@ -310,6 +310,10 @@ static const VulkanOptExtension optional_device_exts[] = {
     { VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,        FF_VK_EXT_DRM_MODIFIER_FLAGS     },
     { VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,            FF_VK_EXT_EXTERNAL_FD_SEM        },
     { VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME,             FF_VK_EXT_EXTERNAL_HOST_MEMORY   },
+#ifdef _WIN32
+    { VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,            FF_VK_EXT_EXTERNAL_WIN32_MEMORY  },
+    { VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,         FF_VK_EXT_EXTERNAL_WIN32_SEM     },
+#endif
 
     /* Video encoding/decoding */
     { VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,                      FF_VK_EXT_NO_FLAG                },
@@ -828,6 +832,13 @@ static int setup_queue_families(AVHWDeviceContext *ctx, VkDeviceCreateInfo *cd)
     enc_index   = pick_queue_family(qf, num, VK_QUEUE_VIDEO_ENCODE_BIT_KHR);
     dec_index   = pick_queue_family(qf, num, VK_QUEUE_VIDEO_DECODE_BIT_KHR);
 
+    /* Signalling the transfer capabilities on a queue family is optional */
+    if (tx_index < 0) {
+        tx_index = pick_queue_family(qf, num, VK_QUEUE_COMPUTE_BIT);
+        if (tx_index < 0)
+            tx_index = pick_queue_family(qf, num, VK_QUEUE_GRAPHICS_BIT);
+    }
+
     hwctx->queue_family_index        = -1;
     hwctx->queue_family_comp_index   = -1;
     hwctx->queue_family_tx_index     = -1;
@@ -1109,6 +1120,8 @@ static int submit_exec_ctx(AVHWFramesContext *hwfc, VulkanExecCtx *cmd,
 
     ret = vk->QueueSubmit(q->queue, 1, s_info, q->fence);
     if (ret != VK_SUCCESS) {
+        av_log(hwfc, AV_LOG_ERROR, "Queue submission failure: %s\n",
+               vk_ret2str(ret));
         unref_exec_ctx_deps(hwfc, cmd);
         return AVERROR_EXTERNAL;
     }
@@ -1215,6 +1228,7 @@ static int vulkan_device_create_internal(AVHWDeviceContext *ctx,
     if (!dev_features_1_2.timelineSemaphore) {
         av_log(ctx, AV_LOG_ERROR, "Device does not support timeline semaphores!\n");
         err = AVERROR(ENOSYS);
+        goto end;
     }
     p->device_features_1_2.timelineSemaphore = 1;
 
@@ -1550,8 +1564,10 @@ static int alloc_mem(AVHWDeviceContext *ctx, VkMemoryRequirements *req,
     return 0;
 }
 
-static void vulkan_free_internal(AVVkFrameInternal *internal)
+static void vulkan_free_internal(AVVkFrame *f)
 {
+    AVVkFrameInternal *internal = f->internal;
+
     if (!internal)
         return;
 
@@ -1571,14 +1587,19 @@ static void vulkan_free_internal(AVVkFrameInternal *internal)
                 CHECK_CU(cu->cuMipmappedArrayDestroy(internal->cu_mma[i]));
             if (internal->ext_mem[i])
                 CHECK_CU(cu->cuDestroyExternalMemory(internal->ext_mem[i]));
-            close(internal->exp_sem[i]);
+#ifdef _WIN32
+            if (internal->ext_sem_handle[i])
+                CloseHandle(internal->ext_sem_handle[i]);
+            if (internal->ext_mem_handle[i])
+                CloseHandle(internal->ext_mem_handle[i]);
+#endif
         }
 
         av_buffer_unref(&internal->cuda_fc_ref);
     }
 #endif
 
-    av_free(internal);
+    av_freep(&f->internal);
 }
 
 static void vulkan_frame_free(void *opaque, uint8_t *data)
@@ -1594,7 +1615,7 @@ static void vulkan_frame_free(void *opaque, uint8_t *data)
      * issues tracking command buffer execution state on uninit. */
     vk->DeviceWaitIdle(hwctx->act_dev);
 
-    vulkan_free_internal(f->internal);
+    vulkan_free_internal(f);
 
     for (int i = 0; i < planes; i++) {
         vk->DestroyImage(hwctx->act_dev, f->img[i], hwctx->alloc);
@@ -1676,15 +1697,15 @@ static int alloc_bind_mem(AVHWFramesContext *hwfc, AVVkFrame *f,
 
 enum PrepMode {
     PREP_MODE_WRITE,
-    PREP_MODE_RO_SHADER,
     PREP_MODE_EXTERNAL_EXPORT,
+    PREP_MODE_EXTERNAL_IMPORT
 };
 
 static int prepare_frame(AVHWFramesContext *hwfc, VulkanExecCtx *ectx,
                          AVVkFrame *frame, enum PrepMode pmode)
 {
     int err;
-    uint32_t dst_qf;
+    uint32_t src_qf, dst_qf;
     VkImageLayout new_layout;
     VkAccessFlags new_access;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
@@ -1717,16 +1738,24 @@ static int prepare_frame(AVHWFramesContext *hwfc, VulkanExecCtx *ectx,
     case PREP_MODE_WRITE:
         new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         new_access = VK_ACCESS_TRANSFER_WRITE_BIT;
+        src_qf     = VK_QUEUE_FAMILY_IGNORED;
         dst_qf     = VK_QUEUE_FAMILY_IGNORED;
         break;
-    case PREP_MODE_RO_SHADER:
-        new_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        new_access = VK_ACCESS_TRANSFER_READ_BIT;
+    case PREP_MODE_EXTERNAL_IMPORT:
+        new_layout = VK_IMAGE_LAYOUT_GENERAL;
+        new_access = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        src_qf     = VK_QUEUE_FAMILY_EXTERNAL_KHR;
         dst_qf     = VK_QUEUE_FAMILY_IGNORED;
+        s_timeline_sem_info.pWaitSemaphoreValues = frame->sem_value;
+        s_timeline_sem_info.waitSemaphoreValueCount = planes;
+        s_info.pWaitSemaphores = frame->sem;
+        s_info.pWaitDstStageMask = wait_st;
+        s_info.waitSemaphoreCount = planes;
         break;
     case PREP_MODE_EXTERNAL_EXPORT:
         new_layout = VK_IMAGE_LAYOUT_GENERAL;
         new_access = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        src_qf     = VK_QUEUE_FAMILY_IGNORED;
         dst_qf     = VK_QUEUE_FAMILY_EXTERNAL_KHR;
         s_timeline_sem_info.pWaitSemaphoreValues = frame->sem_value;
         s_timeline_sem_info.waitSemaphoreValueCount = planes;
@@ -1748,7 +1777,7 @@ static int prepare_frame(AVHWFramesContext *hwfc, VulkanExecCtx *ectx,
         img_bar[i].dstAccessMask = new_access;
         img_bar[i].oldLayout = frame->layout[i];
         img_bar[i].newLayout = new_layout;
-        img_bar[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        img_bar[i].srcQueueFamilyIndex = src_qf;
         img_bar[i].dstQueueFamilyIndex = dst_qf;
         img_bar[i].image = frame->img[i];
         img_bar[i].subresourceRange.levelCount = 1;
@@ -1800,12 +1829,22 @@ static int create_frame(AVHWFramesContext *hwfc, AVVkFrame **frame,
 
     VkExportSemaphoreCreateInfo ext_sem_info = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO,
+#ifdef _WIN32
+        .handleTypes = IsWindows8OrGreater()
+            ? VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT
+            : VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT,
+#else
         .handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT,
+#endif
     };
 
     VkSemaphoreTypeCreateInfo sem_type_info = {
         .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+#ifdef _WIN32
+        .pNext         = p->extensions & FF_VK_EXT_EXTERNAL_WIN32_SEM ? &ext_sem_info : NULL,
+#else
         .pNext         = p->extensions & FF_VK_EXT_EXTERNAL_FD_SEM ? &ext_sem_info : NULL,
+#endif
         .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
         .initialValue  = 0,
     };
@@ -1936,6 +1975,12 @@ static AVBufferRef *vulkan_pool_alloc(void *opaque, size_t size)
         .pNext       = hwctx->create_pnext,
     };
 
+#ifdef _WIN32
+    if (p->extensions & FF_VK_EXT_EXTERNAL_WIN32_MEMORY)
+        try_export_flags(hwfc, &eiinfo.handleTypes, &e, IsWindows8OrGreater()
+                             ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT
+                             : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT);
+#else
     if (p->extensions & FF_VK_EXT_EXTERNAL_FD_MEMORY)
         try_export_flags(hwfc, &eiinfo.handleTypes, &e,
                          VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
@@ -1943,6 +1988,7 @@ static AVBufferRef *vulkan_pool_alloc(void *opaque, size_t size)
     if (p->extensions & (FF_VK_EXT_EXTERNAL_DMABUF_MEMORY | FF_VK_EXT_DRM_MODIFIER_FLAGS))
         try_export_flags(hwfc, &eiinfo.handleTypes, &e,
                          VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
+#endif
 
     for (int i = 0; i < av_pix_fmt_count_planes(hwfc->sw_format); i++) {
         eminfo[i].sType       = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
@@ -1998,7 +2044,7 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
                     VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
 
     if (!hwctx->usage)
-        hwctx->usage = DEFAULT_USAGE_FLAGS;
+        hwctx->usage = FF_VK_DEFAULT_USAGE_FLAGS;
 
     err = create_exec_ctx(hwfc, &fp->conv_ctx,
                           dev_hwctx->queue_family_comp_index,
@@ -2199,21 +2245,33 @@ fail:
 }
 
 #if CONFIG_LIBDRM
-static void vulkan_unmap_from(AVHWFramesContext *hwfc, HWMapDescriptor *hwmap)
+static void vulkan_unmap_from_drm(AVHWFramesContext *hwfc, HWMapDescriptor *hwmap)
 {
-    VulkanMapping *map = hwmap->priv;
+    AVVkFrame *f = hwmap->priv;
     AVVulkanDeviceContext *hwctx = hwfc->device_ctx->hwctx;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
     VulkanDevicePriv *p = hwfc->device_ctx->internal->priv;
     FFVulkanFunctions *vk = &p->vkfn;
 
+    VkSemaphoreWaitInfo wait_info = {
+        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .flags          = 0x0,
+        .pSemaphores    = f->sem,
+        .pValues        = f->sem_value,
+        .semaphoreCount = planes,
+    };
+
+    vk->WaitSemaphores(hwctx->act_dev, &wait_info, UINT64_MAX);
+
+    vulkan_free_internal(f);
+
     for (int i = 0; i < planes; i++) {
-        vk->DestroyImage(hwctx->act_dev, map->frame->img[i], hwctx->alloc);
-        vk->FreeMemory(hwctx->act_dev, map->frame->mem[i], hwctx->alloc);
-        vk->DestroySemaphore(hwctx->act_dev, map->frame->sem[i], hwctx->alloc);
+        vk->DestroyImage(hwctx->act_dev, f->img[i], hwctx->alloc);
+        vk->FreeMemory(hwctx->act_dev, f->mem[i], hwctx->alloc);
+        vk->DestroySemaphore(hwctx->act_dev, f->sem[i], hwctx->alloc);
     }
 
-    av_freep(&map->frame);
+    av_free(f);
 }
 
 static const struct {
@@ -2320,8 +2378,12 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
         };
 
         /* Image format verification */
+        VkExternalImageFormatProperties ext_props = {
+            .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR,
+        };
         VkImageFormatProperties2 props_ret = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+            .pNext = &ext_props,
         };
         VkPhysicalDeviceImageDrmFormatModifierInfoEXT props_drm_mod = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
@@ -2488,10 +2550,7 @@ static int vulkan_map_from_drm_frame_desc(AVHWFramesContext *hwfc, AVVkFrame **f
         goto fail;
     }
 
-    /* NOTE: This is completely uneccesary and unneeded once we can import
-     * semaphores from DRM. Otherwise we have to activate the semaphores.
-     * We're reusing the exec context that's also used for uploads/downloads. */
-    err = prepare_frame(hwfc, &fp->conv_ctx, f, PREP_MODE_RO_SHADER);
+    err = prepare_frame(hwfc, &fp->conv_ctx, f, PREP_MODE_EXTERNAL_IMPORT);
     if (err)
         goto fail;
 
@@ -2517,7 +2576,6 @@ static int vulkan_map_from_drm(AVHWFramesContext *hwfc, AVFrame *dst,
 {
     int err = 0;
     AVVkFrame *f;
-    VulkanMapping *map = NULL;
 
     if ((err = vulkan_map_from_drm_frame_desc(hwfc, &f, src)))
         return err;
@@ -2527,15 +2585,8 @@ static int vulkan_map_from_drm(AVHWFramesContext *hwfc, AVFrame *dst,
     dst->width   = src->width;
     dst->height  = src->height;
 
-    map = av_mallocz(sizeof(VulkanMapping));
-    if (!map)
-        goto fail;
-
-    map->frame = f;
-    map->flags = flags;
-
     err = ff_hwframe_map_create(dst->hw_frames_ctx, dst, src,
-                                &vulkan_unmap_from, map);
+                                &vulkan_unmap_from_drm, f);
     if (err < 0)
         goto fail;
 
@@ -2545,7 +2596,6 @@ static int vulkan_map_from_drm(AVHWFramesContext *hwfc, AVFrame *dst,
 
 fail:
     vulkan_frame_free(hwfc->device_ctx->hwctx, (uint8_t *)f);
-    av_free(map);
     return err;
 }
 
@@ -2616,15 +2666,13 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
         if (!dst_f->internal)
             dst_f->internal = dst_int = av_mallocz(sizeof(*dst_f->internal));
 
-        if (!dst_int) {
-            err = AVERROR(ENOMEM);
-            goto fail;
-        }
+        if (!dst_int)
+            return AVERROR(ENOMEM);
 
         dst_int->cuda_fc_ref = av_buffer_ref(cuda_hwfc);
         if (!dst_int->cuda_fc_ref) {
-            err = AVERROR(ENOMEM);
-            goto fail;
+            av_freep(&dst_f->internal);
+            return AVERROR(ENOMEM);
         }
 
         for (int i = 0; i < planes; i++) {
@@ -2638,6 +2686,43 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
                 },
                 .numLevels = 1,
             };
+            int p_w, p_h;
+
+#ifdef _WIN32
+            CUDA_EXTERNAL_MEMORY_HANDLE_DESC ext_desc = {
+                .type = IsWindows8OrGreater()
+                    ? CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32
+                    : CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT,
+                .size = dst_f->size[i],
+            };
+            VkMemoryGetWin32HandleInfoKHR export_info = {
+                .sType      = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR,
+                .memory     = dst_f->mem[i],
+                .handleType = IsWindows8OrGreater()
+                    ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT
+                    : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT,
+            };
+            VkSemaphoreGetWin32HandleInfoKHR sem_export = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR,
+                .semaphore = dst_f->sem[i],
+                .handleType = IsWindows8OrGreater()
+                    ? VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT
+                    : VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT,
+            };
+            CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC ext_sem_desc = {
+                .type = 10 /* TODO: CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_WIN32 */,
+            };
+
+            ret = vk->GetMemoryWin32HandleKHR(hwctx->act_dev, &export_info,
+                                              &ext_desc.handle.win32.handle);
+            if (ret != VK_SUCCESS) {
+                av_log(hwfc, AV_LOG_ERROR, "Unable to export the image as a Win32 Handle: %s!\n",
+                       vk_ret2str(ret));
+                err = AVERROR_EXTERNAL;
+                goto fail;
+            }
+            dst_int->ext_mem_handle[i] = ext_desc.handle.win32.handle;
+#else
             CUDA_EXTERNAL_MEMORY_HANDLE_DESC ext_desc = {
                 .type = CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD,
                 .size = dst_f->size[i],
@@ -2656,25 +2741,28 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
                 .type = 9 /* TODO: CU_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TIMELINE_SEMAPHORE_FD */,
             };
 
-            int p_w, p_h;
-            get_plane_wh(&p_w, &p_h, hwfc->sw_format, hwfc->width, hwfc->height, i);
-
-            tex_desc.arrayDesc.Width = p_w;
-            tex_desc.arrayDesc.Height = p_h;
-
             ret = vk->GetMemoryFdKHR(hwctx->act_dev, &export_info,
                                      &ext_desc.handle.fd);
             if (ret != VK_SUCCESS) {
-                av_log(hwfc, AV_LOG_ERROR, "Unable to export the image as a FD!\n");
+                av_log(hwfc, AV_LOG_ERROR, "Unable to export the image as a FD: %s!\n",
+                       vk_ret2str(ret));
+                err = AVERROR_EXTERNAL;
+                goto fail;
+            }
+#endif
+
+            ret = CHECK_CU(cu->cuImportExternalMemory(&dst_int->ext_mem[i], &ext_desc));
+            if (ret < 0) {
+#ifndef _WIN32
+                close(ext_desc.handle.fd);
+#endif
                 err = AVERROR_EXTERNAL;
                 goto fail;
             }
 
-            ret = CHECK_CU(cu->cuImportExternalMemory(&dst_int->ext_mem[i], &ext_desc));
-            if (ret < 0) {
-                err = AVERROR_EXTERNAL;
-                goto fail;
-            }
+            get_plane_wh(&p_w, &p_h, hwfc->sw_format, hwfc->width, hwfc->height, i);
+            tex_desc.arrayDesc.Width = p_w;
+            tex_desc.arrayDesc.Height = p_h;
 
             ret = CHECK_CU(cu->cuExternalMemoryGetMappedMipmappedArray(&dst_int->cu_mma[i],
                                                                        dst_int->ext_mem[i],
@@ -2691,21 +2779,29 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
                 goto fail;
             }
 
+#ifdef _WIN32
+            ret = vk->GetSemaphoreWin32HandleKHR(hwctx->act_dev, &sem_export,
+                                                 &ext_sem_desc.handle.win32.handle);
+#else
             ret = vk->GetSemaphoreFdKHR(hwctx->act_dev, &sem_export,
-                                        &dst_int->exp_sem[i]);
+                                        &ext_sem_desc.handle.fd);
+#endif
             if (ret != VK_SUCCESS) {
                 av_log(ctx, AV_LOG_ERROR, "Failed to export semaphore: %s\n",
                        vk_ret2str(ret));
                 err = AVERROR_EXTERNAL;
                 goto fail;
             }
-
-            ext_sem_desc.handle.fd = dup(dst_int->exp_sem[i]);
+#ifdef _WIN32
+            dst_int->ext_sem_handle[i] = ext_sem_desc.handle.win32.handle;
+#endif
 
             ret = CHECK_CU(cu->cuImportExternalSemaphore(&dst_int->cu_sem[i],
                                                          &ext_sem_desc));
             if (ret < 0) {
+#ifndef _WIN32
                 close(ext_sem_desc.handle.fd);
+#endif
                 err = AVERROR_EXTERNAL;
                 goto fail;
             }
@@ -2715,6 +2811,7 @@ static int vulkan_export_to_cuda(AVHWFramesContext *hwfc,
     return 0;
 
 fail:
+    vulkan_free_internal(dst_f);
     return err;
 }
 
@@ -2722,10 +2819,10 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
                                           AVFrame *dst, const AVFrame *src)
 {
     int err;
-    VkResult ret;
     CUcontext dummy;
     AVVkFrame *dst_f;
     AVVkFrameInternal *dst_int;
+    VulkanFramesPriv *fp = hwfc->internal->priv;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
 
@@ -2737,16 +2834,20 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
     CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS s_w_par[AV_NUM_DATA_POINTERS] = { 0 };
     CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS s_s_par[AV_NUM_DATA_POINTERS] = { 0 };
 
-    ret = CHECK_CU(cu->cuCtxPushCurrent(cuda_dev->cuda_ctx));
-    if (ret < 0)
-        return AVERROR_EXTERNAL;
-
     dst_f = (AVVkFrame *)dst->data[0];
 
-    ret = vulkan_export_to_cuda(hwfc, src->hw_frames_ctx, dst);
-    if (ret < 0) {
+    err = prepare_frame(hwfc, &fp->upload_ctx, dst_f, PREP_MODE_EXTERNAL_EXPORT);
+    if (err < 0)
+        return err;
+
+    err = CHECK_CU(cu->cuCtxPushCurrent(cuda_dev->cuda_ctx));
+    if (err < 0)
+        return err;
+
+    err = vulkan_export_to_cuda(hwfc, src->hw_frames_ctx, dst);
+    if (err < 0) {
         CHECK_CU(cu->cuCtxPopCurrent(&dummy));
-        return ret;
+        return err;
     }
 
     dst_int = dst_f->internal;
@@ -2756,12 +2857,10 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
         s_s_par[i].params.fence.value = dst_f->sem_value[i] + 1;
     }
 
-    ret = CHECK_CU(cu->cuWaitExternalSemaphoresAsync(dst_int->cu_sem, s_w_par,
+    err = CHECK_CU(cu->cuWaitExternalSemaphoresAsync(dst_int->cu_sem, s_w_par,
                                                      planes, cuda_dev->stream));
-    if (ret < 0) {
-        err = AVERROR_EXTERNAL;
+    if (err < 0)
         goto fail;
-    }
 
     for (int i = 0; i < planes; i++) {
         CUDA_MEMCPY2D cpy = {
@@ -2780,19 +2879,15 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
         cpy.WidthInBytes = p_w * desc->comp[i].step;
         cpy.Height = p_h;
 
-        ret = CHECK_CU(cu->cuMemcpy2DAsync(&cpy, cuda_dev->stream));
-        if (ret < 0) {
-            err = AVERROR_EXTERNAL;
+        err = CHECK_CU(cu->cuMemcpy2DAsync(&cpy, cuda_dev->stream));
+        if (err < 0)
             goto fail;
-        }
     }
 
-    ret = CHECK_CU(cu->cuSignalExternalSemaphoresAsync(dst_int->cu_sem, s_s_par,
+    err = CHECK_CU(cu->cuSignalExternalSemaphoresAsync(dst_int->cu_sem, s_s_par,
                                                        planes, cuda_dev->stream));
-    if (ret < 0) {
-        err = AVERROR_EXTERNAL;
+    if (err < 0)
         goto fail;
-    }
 
     for (int i = 0; i < planes; i++)
         dst_f->sem_value[i]++;
@@ -2801,11 +2896,11 @@ static int vulkan_transfer_data_from_cuda(AVHWFramesContext *hwfc,
 
     av_log(hwfc, AV_LOG_VERBOSE, "Transfered CUDA image to Vulkan!\n");
 
-    return 0;
+    return err = prepare_frame(hwfc, &fp->upload_ctx, dst_f, PREP_MODE_EXTERNAL_IMPORT);
 
 fail:
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
-    vulkan_free_internal(dst_int);
+    vulkan_free_internal(dst_f);
     dst_f->internal = NULL;
     av_buffer_unref(&dst->buf[0]);
     return err;
@@ -3532,8 +3627,13 @@ static int vulkan_transfer_data_to(AVHWFramesContext *hwfc, AVFrame *dst,
     switch (src->format) {
 #if CONFIG_CUDA
     case AV_PIX_FMT_CUDA:
+#ifdef _WIN32
+        if ((p->extensions & FF_VK_EXT_EXTERNAL_WIN32_MEMORY) &&
+            (p->extensions & FF_VK_EXT_EXTERNAL_WIN32_SEM))
+#else
         if ((p->extensions & FF_VK_EXT_EXTERNAL_FD_MEMORY) &&
             (p->extensions & FF_VK_EXT_EXTERNAL_FD_SEM))
+#endif
             return vulkan_transfer_data_from_cuda(hwfc, dst, src);
 #endif
     default:
@@ -3549,10 +3649,10 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
                                         const AVFrame *src)
 {
     int err;
-    VkResult ret;
     CUcontext dummy;
     AVVkFrame *dst_f;
     AVVkFrameInternal *dst_int;
+    VulkanFramesPriv *fp = hwfc->internal->priv;
     const int planes = av_pix_fmt_count_planes(hwfc->sw_format);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(hwfc->sw_format);
 
@@ -3564,11 +3664,15 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
     CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS s_w_par[AV_NUM_DATA_POINTERS] = { 0 };
     CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS s_s_par[AV_NUM_DATA_POINTERS] = { 0 };
 
-    ret = CHECK_CU(cu->cuCtxPushCurrent(cuda_dev->cuda_ctx));
-    if (ret < 0)
-        return AVERROR_EXTERNAL;
-
     dst_f = (AVVkFrame *)src->data[0];
+
+    err = prepare_frame(hwfc, &fp->upload_ctx, dst_f, PREP_MODE_EXTERNAL_EXPORT);
+    if (err < 0)
+        return err;
+
+    err = CHECK_CU(cu->cuCtxPushCurrent(cuda_dev->cuda_ctx));
+    if (err < 0)
+        return err;
 
     err = vulkan_export_to_cuda(hwfc, dst->hw_frames_ctx, src);
     if (err < 0) {
@@ -3583,12 +3687,10 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
         s_s_par[i].params.fence.value = dst_f->sem_value[i] + 1;
     }
 
-    ret = CHECK_CU(cu->cuWaitExternalSemaphoresAsync(dst_int->cu_sem, s_w_par,
+    err = CHECK_CU(cu->cuWaitExternalSemaphoresAsync(dst_int->cu_sem, s_w_par,
                                                      planes, cuda_dev->stream));
-    if (ret < 0) {
-        err = AVERROR_EXTERNAL;
+    if (err < 0)
         goto fail;
-    }
 
     for (int i = 0; i < planes; i++) {
         CUDA_MEMCPY2D cpy = {
@@ -3607,19 +3709,15 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
         cpy.WidthInBytes = w * desc->comp[i].step;
         cpy.Height = h;
 
-        ret = CHECK_CU(cu->cuMemcpy2DAsync(&cpy, cuda_dev->stream));
-        if (ret < 0) {
-            err = AVERROR_EXTERNAL;
+        err = CHECK_CU(cu->cuMemcpy2DAsync(&cpy, cuda_dev->stream));
+        if (err < 0)
             goto fail;
-        }
     }
 
-    ret = CHECK_CU(cu->cuSignalExternalSemaphoresAsync(dst_int->cu_sem, s_s_par,
+    err = CHECK_CU(cu->cuSignalExternalSemaphoresAsync(dst_int->cu_sem, s_s_par,
                                                        planes, cuda_dev->stream));
-    if (ret < 0) {
-        err = AVERROR_EXTERNAL;
+    if (err < 0)
         goto fail;
-    }
 
     for (int i = 0; i < planes; i++)
         dst_f->sem_value[i]++;
@@ -3628,11 +3726,11 @@ static int vulkan_transfer_data_to_cuda(AVHWFramesContext *hwfc, AVFrame *dst,
 
     av_log(hwfc, AV_LOG_VERBOSE, "Transfered Vulkan image to CUDA!\n");
 
-    return 0;
+    return prepare_frame(hwfc, &fp->upload_ctx, dst_f, PREP_MODE_EXTERNAL_IMPORT);
 
 fail:
     CHECK_CU(cu->cuCtxPopCurrent(&dummy));
-    vulkan_free_internal(dst_int);
+    vulkan_free_internal(dst_f);
     dst_f->internal = NULL;
     av_buffer_unref(&dst->buf[0]);
     return err;
@@ -3647,8 +3745,13 @@ static int vulkan_transfer_data_from(AVHWFramesContext *hwfc, AVFrame *dst,
     switch (dst->format) {
 #if CONFIG_CUDA
     case AV_PIX_FMT_CUDA:
+#ifdef _WIN32
+        if ((p->extensions & FF_VK_EXT_EXTERNAL_WIN32_MEMORY) &&
+            (p->extensions & FF_VK_EXT_EXTERNAL_WIN32_SEM))
+#else
         if ((p->extensions & FF_VK_EXT_EXTERNAL_FD_MEMORY) &&
             (p->extensions & FF_VK_EXT_EXTERNAL_FD_SEM))
+#endif
             return vulkan_transfer_data_to_cuda(hwfc, dst, src);
 #endif
     default:

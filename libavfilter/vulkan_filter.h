@@ -16,26 +16,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFILTER_GLSLANG_H
-#define AVFILTER_GLSLANG_H
+#ifndef AVFILTER_VULKAN_FILTER_H
+#define AVFILTER_VULKAN_FILTER_H
+
+#include "avfilter.h"
 
 #include "vulkan.h"
 
 /**
- * Un/initialize glslang's global state. Thread-safe and reference counted.
+ * General lavfi IO functions
  */
-int ff_vk_glslang_init(void);
-void ff_vk_glslang_uninit(void);
+int  ff_vk_filter_init                 (AVFilterContext *avctx);
+int  ff_vk_filter_config_input         (AVFilterLink   *inlink);
+int  ff_vk_filter_config_output        (AVFilterLink  *outlink);
+int  ff_vk_filter_config_output_inplace(AVFilterLink  *outlink);
 
-/**
- * Compile GLSL into SPIR-V using glslang.
- */
-int ff_vk_glslang_shader_compile(AVFilterContext *avctx, FFSPIRVShader *shd,
-                                 uint8_t **data, size_t *size, void **opaque);
-
-/**
- * Frees the shader-specific context.
- */
-void ff_vk_glslang_shader_free(void *opaque);
-
-#endif /* AVFILTER_GLSLANG_H */
+#endif /* AVFILTER_VULKAN_FILTER_H */
