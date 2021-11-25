@@ -153,7 +153,6 @@ int audio_volume      = 256;
 int audio_sync_method = 0;
 int video_sync_method = VSYNC_AUTO;
 float frame_drop_threshold = 0;
-int do_deinterlace    = 0;
 int do_benchmark      = 0;
 int do_benchmark_all  = 0;
 int do_hex_dump       = 0;
@@ -176,11 +175,9 @@ int auto_conversion_filters = 1;
 int64_t stats_period = 500000;
 
 
-static int intra_only         = 0;
 static int file_overwrite     = 0;
 static int no_file_overwrite  = 0;
 static int do_psnr            = 0;
-static int input_sync;
 static int input_stream_potentially_available = 0;
 static int ignore_unknown_streams = 0;
 static int copy_unknown_streams = 0;
@@ -303,27 +300,6 @@ static int opt_stats_period(void *optctx, const char *opt, const char *arg)
     av_log(NULL, AV_LOG_INFO, "ffmpeg stats and -progress period set to %s.\n", arg);
 
     return 0;
-}
-
-static int opt_sameq(void *optctx, const char *opt, const char *arg)
-{
-    av_log(NULL, AV_LOG_ERROR, "Option '%s' was removed. "
-           "If you are looking for an option to preserve the quality (which is not "
-           "what -%s was for), use -qscale 0 or an equivalent quality factor option.\n",
-           opt, opt);
-    return AVERROR(EINVAL);
-}
-
-static int opt_video_channel(void *optctx, const char *opt, const char *arg)
-{
-    av_log(NULL, AV_LOG_WARNING, "This option is deprecated, use -channel.\n");
-    return opt_default(optctx, "channel", arg);
-}
-
-static int opt_video_standard(void *optctx, const char *opt, const char *arg)
-{
-    av_log(NULL, AV_LOG_WARNING, "This option is deprecated, use -standard.\n");
-    return opt_default(optctx, "standard", arg);
 }
 
 static int opt_audio_codec(void *optctx, const char *opt, const char *arg)
@@ -1822,8 +1798,6 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
         }
         st->sample_aspect_ratio = video_enc->sample_aspect_ratio;
 
-        if (intra_only)
-            video_enc->gop_size = 0;
         MATCH_PER_STREAM_OPT(intra_matrices, str, intra_matrix, oc, st);
         if (intra_matrix) {
             if (!(video_enc->intra_matrix = av_mallocz(sizeof(*video_enc->intra_matrix) * 64))) {
@@ -3772,8 +3746,6 @@ const OptionDef options[] = {
         "set pixel format", "format" },
     { "bits_per_raw_sample", OPT_VIDEO | OPT_INT | HAS_ARG,                      { &frame_bits_per_raw_sample },
         "set the number of bits per raw sample", "number" },
-    { "intra",        OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &intra_only },
-        "deprecated use -g 1" },
     { "vn",           OPT_VIDEO | OPT_BOOL  | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT,{ .off = OFFSET(video_disable) },
         "disable video" },
     { "rc_override",  OPT_VIDEO | HAS_ARG | OPT_EXPERT  | OPT_STRING | OPT_SPEC |
@@ -3782,10 +3754,6 @@ const OptionDef options[] = {
     { "vcodec",       OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_INPUT |
                       OPT_OUTPUT,                                                { .func_arg = opt_video_codec },
         "force video codec ('copy' to copy stream)", "codec" },
-    { "sameq",        OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_sameq },
-        "Removed" },
-    { "same_quant",   OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_sameq },
-        "Removed" },
     { "timecode",     OPT_VIDEO | HAS_ARG | OPT_PERFILE | OPT_OUTPUT,            { .func_arg = opt_timecode },
         "set initial TimeCode value.", "hh:mm:ss[:;.]ff" },
     { "pass",         OPT_VIDEO | HAS_ARG | OPT_SPEC | OPT_INT | OPT_OUTPUT,     { .off = OFFSET(pass) },
@@ -3793,8 +3761,6 @@ const OptionDef options[] = {
     { "passlogfile",  OPT_VIDEO | HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC |
                       OPT_OUTPUT,                                                { .off = OFFSET(passlogfiles) },
         "select two pass log file name prefix", "prefix" },
-    { "deinterlace",  OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_deinterlace },
-        "this option is deprecated, use the yadif filter instead" },
     { "psnr",         OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_psnr },
         "calculate PSNR of compressed frames" },
     { "vstats",       OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_vstats },
@@ -3899,13 +3865,6 @@ const OptionDef options[] = {
         "fix subtitles duration" },
     { "canvas_size", OPT_SUBTITLE | HAS_ARG | OPT_STRING | OPT_SPEC | OPT_INPUT, { .off = OFFSET(canvas_sizes) },
         "set canvas size (WxH or abbreviation)", "size" },
-
-    /* grab options */
-    { "vc", HAS_ARG | OPT_EXPERT | OPT_VIDEO, { .func_arg = opt_video_channel },
-        "deprecated, use -channel", "channel" },
-    { "tvstd", HAS_ARG | OPT_EXPERT | OPT_VIDEO, { .func_arg = opt_video_standard },
-        "deprecated, use -standard", "standard" },
-    { "isync", OPT_BOOL | OPT_EXPERT, { &input_sync }, "this option is deprecated and does nothing", "" },
 
     /* muxer options */
     { "muxdelay",   OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_max_delay) },

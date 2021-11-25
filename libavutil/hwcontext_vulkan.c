@@ -1150,13 +1150,15 @@ static void vulkan_device_free(AVHWDeviceContext *ctx)
     FFVulkanFunctions *vk = &p->vkfn;
     AVVulkanDeviceContext *hwctx = ctx->hwctx;
 
-    vk->DestroyDevice(hwctx->act_dev, hwctx->alloc);
+    if (hwctx->act_dev)
+        vk->DestroyDevice(hwctx->act_dev, hwctx->alloc);
 
     if (p->debug_ctx)
         vk->DestroyDebugUtilsMessengerEXT(hwctx->inst, p->debug_ctx,
                                           hwctx->alloc);
 
-    vk->DestroyInstance(hwctx->inst, hwctx->alloc);
+    if (hwctx->inst)
+        vk->DestroyInstance(hwctx->inst, hwctx->alloc);
 
     if (p->libvulkan)
         dlclose(p->libvulkan);
