@@ -60,15 +60,7 @@ enum HWAccelID {
     HWACCEL_NONE = 0,
     HWACCEL_AUTO,
     HWACCEL_GENERIC,
-    HWACCEL_VIDEOTOOLBOX,
 };
-
-typedef struct HWAccel {
-    const char *name;
-    int (*init)(AVCodecContext *s);
-    enum HWAccelID id;
-    enum AVPixelFormat pix_fmt;
-} HWAccel;
 
 typedef struct HWDevice {
     const char *name;
@@ -281,9 +273,10 @@ typedef struct OutputFilter {
     uint64_t channel_layout;
 
     // those are only set if no format is specified and the encoder gives us multiple options
-    int *formats;
-    uint64_t *channel_layouts;
-    int *sample_rates;
+    // They point directly to the relevant lists of the encoder.
+    const int *formats;
+    const uint64_t *channel_layouts;
+    const int *sample_rates;
 } OutputFilter;
 
 typedef struct FilterGraph {
@@ -626,7 +619,6 @@ extern int stdin_interaction;
 extern int frame_bits_per_raw_sample;
 extern AVIOContext *progress_avio;
 extern float max_error_rate;
-extern char *videotoolbox_pixfmt;
 
 extern char *filter_nbthreads;
 extern int filter_complex_nbthreads;
@@ -636,7 +628,6 @@ extern int auto_conversion_filters;
 extern const AVIOInterruptCB int_cb;
 
 extern const OptionDef options[];
-extern const HWAccel hwaccels[];
 #if CONFIG_QSV
 extern char *qsv_device;
 #endif

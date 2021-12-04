@@ -555,9 +555,6 @@ static void ffmpeg_cleanup(int ret)
 
             avfilter_inout_free(&ofilter->out_tmp);
             av_freep(&ofilter->name);
-            av_freep(&ofilter->formats);
-            av_freep(&ofilter->channel_layouts);
-            av_freep(&ofilter->sample_rates);
             av_freep(&fg->outputs[j]);
         }
         av_freep(&fg->outputs);
@@ -753,14 +750,13 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
         AVPacket *tmp_pkt;
         /* the muxer is not initialized yet, buffer the packet */
         if (!av_fifo_space(ost->muxing_queue)) {
+            size_t cur_size = av_fifo_size(ost->muxing_queue);
             unsigned int are_we_over_size =
                 (ost->muxing_queue_data_size + pkt->size) > ost->muxing_queue_data_threshold;
-            int new_size = are_we_over_size ?
-                           FFMIN(2 * av_fifo_size(ost->muxing_queue),
-                                 ost->max_muxing_queue_size) :
-                           2 * av_fifo_size(ost->muxing_queue);
+            size_t limit    = are_we_over_size ? ost->max_muxing_queue_size : INT_MAX;
+            size_t new_size = FFMIN(2 * cur_size, limit);
 
-            if (new_size <= av_fifo_size(ost->muxing_queue)) {
+            if (new_size <= cur_size) {
                 av_log(NULL, AV_LOG_ERROR,
                        "Too many packets buffered for output stream %d:%d.\n",
                        ost->file_index, ost->st->index);
@@ -875,10 +871,11 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
 static void close_output_stream(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
+    AVRational time_base = ost->stream_copy ? ost->mux_timebase : ost->enc_ctx->time_base;
 
     ost->finished |= ENCODER_FINISHED;
     if (of->shortest) {
-        int64_t end = av_rescale_q(ost->sync_opts - ost->first_pts, ost->enc_ctx->time_base, AV_TIME_BASE_Q);
+        int64_t end = av_rescale_q(ost->sync_opts - ost->first_pts, time_base, AV_TIME_BASE_Q);
         of->recording_time = FFMIN(of->recording_time, end);
     }
 }
@@ -1487,13 +1484,13 @@ static void do_video_stats(OutputStream *ost, int frame_size)
 static void finish_output_stream(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
-    int i;
+    AVRational time_base = ost->stream_copy ? ost->mux_timebase : ost->enc_ctx->time_base;
 
     ost->finished = ENCODER_FINISHED | MUXER_FINISHED;
 
     if (of->shortest) {
-        for (i = 0; i < of->ctx->nb_streams; i++)
-            output_streams[of->ost_index + i]->finished = ENCODER_FINISHED | MUXER_FINISHED;
+        int64_t end = av_rescale_q(ost->sync_opts - ost->first_pts, time_base, AV_TIME_BASE_Q);
+        of->recording_time = FFMIN(of->recording_time, end);
     }
 }
 
@@ -2090,10 +2087,6 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
         }
     }
 
-    /* force the input stream PTS */
-    if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO)
-        ost->sync_opts++;
-
     if (av_packet_ref(opkt, pkt) < 0)
         exit_program(1);
 
@@ -2116,6 +2109,8 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     opkt->dts -= ost_tb_start_time;
 
     opkt->duration = av_rescale_q(pkt->duration, ist->st->time_base, ost->mux_timebase);
+
+    ost->sync_opts += opkt->duration;
 
     output_packet(of, opkt, ost, 0);
 }
@@ -2859,12 +2854,7 @@ static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat
                     break;
             }
         }
-        if (config) {
-            if (config->device_type != ist->hwaccel_device_type) {
-                // Different hwaccel offered, ignore.
-                continue;
-            }
-
+        if (config && config->device_type == ist->hwaccel_device_type) {
             ret = hwaccel_decode_init(s);
             if (ret < 0) {
                 if (ist->hwaccel_id == HWACCEL_GENERIC) {
@@ -2877,36 +2867,10 @@ static enum AVPixelFormat get_format(AVCodecContext *s, const enum AVPixelFormat
                 }
                 continue;
             }
-        } else {
-            const HWAccel *hwaccel = NULL;
-            int i;
-            for (i = 0; hwaccels[i].name; i++) {
-                if (hwaccels[i].pix_fmt == *p) {
-                    hwaccel = &hwaccels[i];
-                    break;
-                }
-            }
-            if (!hwaccel) {
-                // No hwaccel supporting this pixfmt.
-                continue;
-            }
-            if (hwaccel->id != ist->hwaccel_id) {
-                // Does not match requested hwaccel.
-                continue;
-            }
 
-            ret = hwaccel->init(s);
-            if (ret < 0) {
-                av_log(NULL, AV_LOG_FATAL,
-                       "%s hwaccel requested for input stream #%d:%d, "
-                       "but cannot be initialized.\n", hwaccel->name,
-                       ist->file_index, ist->st->index);
-                return AV_PIX_FMT_NONE;
-            }
+            ist->hwaccel_pix_fmt = *p;
+            break;
         }
-
-        ist->hwaccel_pix_fmt = *p;
-        break;
     }
 
     return *p;

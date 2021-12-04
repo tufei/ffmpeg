@@ -134,12 +134,6 @@ static const char *const opt_name_enc_time_bases[]            = {"enc_time_base"
     }\
 }
 
-const HWAccel hwaccels[] = {
-#if CONFIG_VIDEOTOOLBOX
-    { "videotoolbox", videotoolbox_init, HWACCEL_VIDEOTOOLBOX, AV_PIX_FMT_VIDEOTOOLBOX },
-#endif
-    { 0 },
-};
 HWDevice *filter_hw_device;
 
 char *vstats_filename;
@@ -931,21 +925,10 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
                 else if (!strcmp(hwaccel, "auto"))
                     ist->hwaccel_id = HWACCEL_AUTO;
                 else {
-                    enum AVHWDeviceType type;
-                    int i;
-                    for (i = 0; hwaccels[i].name; i++) {
-                        if (!strcmp(hwaccels[i].name, hwaccel)) {
-                            ist->hwaccel_id = hwaccels[i].id;
-                            break;
-                        }
-                    }
-
-                    if (!ist->hwaccel_id) {
-                        type = av_hwdevice_find_type_by_name(hwaccel);
-                        if (type != AV_HWDEVICE_TYPE_NONE) {
-                            ist->hwaccel_id = HWACCEL_GENERIC;
-                            ist->hwaccel_device_type = type;
-                        }
+                    enum AVHWDeviceType type = av_hwdevice_find_type_by_name(hwaccel);
+                    if (type != AV_HWDEVICE_TYPE_NONE) {
+                        ist->hwaccel_id = HWACCEL_GENERIC;
+                        ist->hwaccel_device_type = type;
                     }
 
                     if (!ist->hwaccel_id) {
@@ -1613,6 +1596,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
 
     ost->max_muxing_queue_size = 128;
     MATCH_PER_STREAM_OPT(max_muxing_queue_size, i, ost->max_muxing_queue_size, oc, st);
+    ost->max_muxing_queue_size = FFMIN(ost->max_muxing_queue_size, INT_MAX / sizeof(ost->pkt));
     ost->max_muxing_queue_size *= sizeof(ost->pkt);
 
     ost->muxing_queue_data_size = 0;
@@ -2213,7 +2197,6 @@ static void init_output_filter(OutputFilter *ofilter, OptionsContext *o,
         exit_program(1);
     }
 
-    ost->source_index = -1;
     ost->filter       = ofilter;
 
     ofilter->ost      = ost;
@@ -2630,7 +2613,6 @@ loop_end:
         /* set the filter output constraints */
         if (ost->filter) {
             OutputFilter *f = ost->filter;
-            int count;
             switch (ost->enc_ctx->codec_type) {
             case AVMEDIA_TYPE_VIDEO:
                 f->frame_rate = ost->frame_rate;
@@ -2638,51 +2620,25 @@ loop_end:
                 f->height     = ost->enc_ctx->height;
                 if (ost->enc_ctx->pix_fmt != AV_PIX_FMT_NONE) {
                     f->format = ost->enc_ctx->pix_fmt;
-                } else if (ost->enc->pix_fmts) {
-                    count = 0;
-                    while (ost->enc->pix_fmts[count] != AV_PIX_FMT_NONE)
-                        count++;
-                    f->formats = av_calloc(count + 1, sizeof(*f->formats));
-                    if (!f->formats)
-                        exit_program(1);
-                    memcpy(f->formats, ost->enc->pix_fmts, (count + 1) * sizeof(*f->formats));
+                } else {
+                    f->formats = ost->enc->pix_fmts;
                 }
                 break;
             case AVMEDIA_TYPE_AUDIO:
                 if (ost->enc_ctx->sample_fmt != AV_SAMPLE_FMT_NONE) {
                     f->format = ost->enc_ctx->sample_fmt;
-                } else if (ost->enc->sample_fmts) {
-                    count = 0;
-                    while (ost->enc->sample_fmts[count] != AV_SAMPLE_FMT_NONE)
-                        count++;
-                    f->formats = av_calloc(count + 1, sizeof(*f->formats));
-                    if (!f->formats)
-                        exit_program(1);
-                    memcpy(f->formats, ost->enc->sample_fmts, (count + 1) * sizeof(*f->formats));
+                } else {
+                    f->formats = ost->enc->sample_fmts;
                 }
                 if (ost->enc_ctx->sample_rate) {
                     f->sample_rate = ost->enc_ctx->sample_rate;
-                } else if (ost->enc->supported_samplerates) {
-                    count = 0;
-                    while (ost->enc->supported_samplerates[count])
-                        count++;
-                    f->sample_rates = av_calloc(count + 1, sizeof(*f->sample_rates));
-                    if (!f->sample_rates)
-                        exit_program(1);
-                    memcpy(f->sample_rates, ost->enc->supported_samplerates,
-                           (count + 1) * sizeof(*f->sample_rates));
+                } else {
+                    f->sample_rates = ost->enc->supported_samplerates;
                 }
                 if (ost->enc_ctx->channels) {
                     f->channel_layout = av_get_default_channel_layout(ost->enc_ctx->channels);
-                } else if (ost->enc->channel_layouts) {
-                    count = 0;
-                    while (ost->enc->channel_layouts[count])
-                        count++;
-                    f->channel_layouts = av_calloc(count + 1, sizeof(*f->channel_layouts));
-                    if (!f->channel_layouts)
-                        exit_program(1);
-                    memcpy(f->channel_layouts, ost->enc->channel_layouts,
-                           (count + 1) * sizeof(*f->channel_layouts));
+                } else {
+                    f->channel_layouts = ost->enc->channel_layouts;
                 }
                 break;
             }
@@ -3810,9 +3766,6 @@ const OptionDef options[] = {
     { "hwaccel_output_format", OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
                           OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccel_output_formats) },
         "select output format used with HW accelerated decoding", "format" },
-#if CONFIG_VIDEOTOOLBOX
-    { "videotoolbox_pixfmt", HAS_ARG | OPT_STRING | OPT_EXPERT, { &videotoolbox_pixfmt}, "" },
-#endif
     { "hwaccels",         OPT_EXIT,                                              { .func_arg = show_hwaccels },
         "show available HW acceleration methods" },
     { "autorotate",       HAS_ARG | OPT_BOOL | OPT_SPEC |
