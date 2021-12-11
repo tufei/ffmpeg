@@ -619,7 +619,8 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
 
     if (ctx->options.enable_cuda) {
         memset(&ctx->cuda_options, 0, sizeof(OrtCUDAProviderOptions));
-        ctx->cuda_options.cudnn_conv_algo_search = DEFAULT;
+        ctx->cuda_options.cudnn_conv_algo_search =
+            OrtCudnnConvAlgoSearchDefault;
         ctx->cuda_options.gpu_mem_limit = -1UL;
 
         *status =
