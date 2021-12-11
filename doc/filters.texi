@@ -22995,6 +22995,7 @@ Default transition effect is fade.
 
 @item duration
 Set cross fade duration in seconds.
+Range is 0 to 60 seconds.
 Default duration is 1 second.
 
 @item offset

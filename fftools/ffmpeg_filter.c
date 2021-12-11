@@ -159,33 +159,31 @@ DEF_CHOOSE_FORMAT(channel_layouts, uint64_t, channel_layout, channel_layouts, 0,
 int init_simple_filtergraph(InputStream *ist, OutputStream *ost)
 {
     FilterGraph *fg = av_mallocz(sizeof(*fg));
+    OutputFilter *ofilter;
+    InputFilter  *ifilter;
 
     if (!fg)
         exit_program(1);
     fg->index = nb_filtergraphs;
 
-    GROW_ARRAY(fg->outputs, fg->nb_outputs);
-    if (!(fg->outputs[0] = av_mallocz(sizeof(*fg->outputs[0]))))
-        exit_program(1);
-    fg->outputs[0]->ost   = ost;
-    fg->outputs[0]->graph = fg;
-    fg->outputs[0]->format = -1;
+    ofilter = ALLOC_ARRAY_ELEM(fg->outputs, fg->nb_outputs);
+    ofilter->ost    = ost;
+    ofilter->graph  = fg;
+    ofilter->format = -1;
 
-    ost->filter = fg->outputs[0];
+    ost->filter = ofilter;
 
-    GROW_ARRAY(fg->inputs, fg->nb_inputs);
-    if (!(fg->inputs[0] = av_mallocz(sizeof(*fg->inputs[0]))))
-        exit_program(1);
-    fg->inputs[0]->ist   = ist;
-    fg->inputs[0]->graph = fg;
-    fg->inputs[0]->format = -1;
+    ifilter = ALLOC_ARRAY_ELEM(fg->inputs, fg->nb_inputs);
+    ifilter->ist    = ist;
+    ifilter->graph  = fg;
+    ifilter->format = -1;
 
-    fg->inputs[0]->frame_queue = av_fifo_alloc(8 * sizeof(AVFrame*));
-    if (!fg->inputs[0]->frame_queue)
+    ifilter->frame_queue = av_fifo_alloc(8 * sizeof(AVFrame*));
+    if (!ifilter->frame_queue)
         exit_program(1);
 
     GROW_ARRAY(ist->filters, ist->nb_filters);
-    ist->filters[ist->nb_filters - 1] = fg->inputs[0];
+    ist->filters[ist->nb_filters - 1] = ifilter;
 
     GROW_ARRAY(filtergraphs, nb_filtergraphs);
     filtergraphs[nb_filtergraphs - 1] = fg;
@@ -214,6 +212,7 @@ static void init_input_filter(FilterGraph *fg, AVFilterInOut *in)
 {
     InputStream *ist = NULL;
     enum AVMediaType type = avfilter_pad_get_type(in->filter_ctx->input_pads, in->pad_idx);
+    InputFilter *ifilter;
     int i;
 
     // TODO: support other filter types
@@ -280,21 +279,19 @@ static void init_input_filter(FilterGraph *fg, AVFilterInOut *in)
     ist->decoding_needed |= DECODING_FOR_FILTER;
     ist->st->discard = AVDISCARD_NONE;
 
-    GROW_ARRAY(fg->inputs, fg->nb_inputs);
-    if (!(fg->inputs[fg->nb_inputs - 1] = av_mallocz(sizeof(*fg->inputs[0]))))
-        exit_program(1);
-    fg->inputs[fg->nb_inputs - 1]->ist   = ist;
-    fg->inputs[fg->nb_inputs - 1]->graph = fg;
-    fg->inputs[fg->nb_inputs - 1]->format = -1;
-    fg->inputs[fg->nb_inputs - 1]->type = ist->st->codecpar->codec_type;
-    fg->inputs[fg->nb_inputs - 1]->name = describe_filter_link(fg, in, 1);
+    ifilter = ALLOC_ARRAY_ELEM(fg->inputs, fg->nb_inputs);
+    ifilter->ist    = ist;
+    ifilter->graph  = fg;
+    ifilter->format = -1;
+    ifilter->type   = ist->st->codecpar->codec_type;
+    ifilter->name   = describe_filter_link(fg, in, 1);
 
-    fg->inputs[fg->nb_inputs - 1]->frame_queue = av_fifo_alloc(8 * sizeof(AVFrame*));
-    if (!fg->inputs[fg->nb_inputs - 1]->frame_queue)
+    ifilter->frame_queue = av_fifo_alloc(8 * sizeof(AVFrame*));
+    if (!ifilter->frame_queue)
         exit_program(1);
 
     GROW_ARRAY(ist->filters, ist->nb_filters);
-    ist->filters[ist->nb_filters - 1] = fg->inputs[fg->nb_inputs - 1];
+    ist->filters[ist->nb_filters - 1] = ifilter;
 }
 
 int init_complex_filtergraph(FilterGraph *fg)
@@ -318,18 +315,15 @@ int init_complex_filtergraph(FilterGraph *fg)
         init_input_filter(fg, cur);
 
     for (cur = outputs; cur;) {
-        GROW_ARRAY(fg->outputs, fg->nb_outputs);
-        fg->outputs[fg->nb_outputs - 1] = av_mallocz(sizeof(*fg->outputs[0]));
-        if (!fg->outputs[fg->nb_outputs - 1])
-            exit_program(1);
+        OutputFilter *const ofilter = ALLOC_ARRAY_ELEM(fg->outputs, fg->nb_outputs);
 
-        fg->outputs[fg->nb_outputs - 1]->graph   = fg;
-        fg->outputs[fg->nb_outputs - 1]->out_tmp = cur;
-        fg->outputs[fg->nb_outputs - 1]->type    = avfilter_pad_get_type(cur->filter_ctx->output_pads,
+        ofilter->graph   = fg;
+        ofilter->out_tmp = cur;
+        ofilter->type    = avfilter_pad_get_type(cur->filter_ctx->output_pads,
                                                                          cur->pad_idx);
-        fg->outputs[fg->nb_outputs - 1]->name = describe_filter_link(fg, cur, 0);
+        ofilter->name    = describe_filter_link(fg, cur, 0);
         cur = cur->next;
-        fg->outputs[fg->nb_outputs - 1]->out_tmp->next = NULL;
+        ofilter->out_tmp->next = NULL;
     }
 
 fail:
@@ -960,6 +954,30 @@ static void cleanup_filtergraph(FilterGraph *fg)
     avfilter_graph_free(&fg->graph);
 }
 
+static int filter_is_buffersrc(const AVFilterContext *f)
+{
+    return f->nb_inputs == 0 &&
+           (!strcmp(f->filter->name, "buffersrc") ||
+            !strcmp(f->filter->name, "abuffersrc"));
+}
+
+static int graph_is_meta(AVFilterGraph *graph)
+{
+    for (unsigned i = 0; i < graph->nb_filters; i++) {
+        const AVFilterContext *f = graph->filters[i];
+
+        /* in addition to filters flagged as meta, also
+         * disregard sinks and buffersources (but not other sources,
+         * since they introduce data we are not aware of)
+         */
+        if (!((f->filter->flags & AVFILTER_FLAG_METADATA_ONLY) ||
+              f->nb_outputs == 0                               ||
+              filter_is_buffersrc(f)))
+            return 0;
+    }
+    return 1;
+}
+
 int configure_filtergraph(FilterGraph *fg)
 {
     AVFilterInOut *inputs, *outputs, *cur;
@@ -1059,6 +1077,8 @@ int configure_filtergraph(FilterGraph *fg)
         avfilter_graph_set_auto_convert(fg->graph, AVFILTER_AUTO_CONVERT_NONE);
     if ((ret = avfilter_graph_config(fg->graph, NULL)) < 0)
         goto fail;
+
+    fg->is_meta = graph_is_meta(fg->graph);
 
     /* limit the lists of allowed formats to the ones selected, to
      * make sure they stay the same if the filtergraph is reconfigured later */

@@ -1145,7 +1145,7 @@ void ff_rtsp_parse_line(AVFormatContext *s,
 }
 
 /* skip a RTP/TCP interleaved packet */
-void ff_rtsp_skip_packet(AVFormatContext *s)
+int ff_rtsp_skip_packet(AVFormatContext *s)
 {
     RTSPState *rt = s->priv_data;
     int ret, len, len1;
@@ -1153,7 +1153,7 @@ void ff_rtsp_skip_packet(AVFormatContext *s)
 
     ret = ffurl_read_complete(rt->rtsp_hd, buf, 3);
     if (ret != 3)
-        return;
+        return ret < 0 ? ret : AVERROR(EIO);
     len = AV_RB16(buf + 1);
 
     av_log(s, AV_LOG_TRACE, "skipping RTP packet len=%d\n", len);
@@ -1165,9 +1165,11 @@ void ff_rtsp_skip_packet(AVFormatContext *s)
             len1 = sizeof(buf);
         ret = ffurl_read_complete(rt->rtsp_hd, buf, len1);
         if (ret != len1)
-            return;
+            return ret < 0 ? ret : AVERROR(EIO);
         len -= len1;
     }
+
+    return 0;
 }
 
 int ff_rtsp_read_reply(AVFormatContext *s, RTSPMessageHeader *reply,
@@ -1178,8 +1180,8 @@ int ff_rtsp_read_reply(AVFormatContext *s, RTSPMessageHeader *reply,
     char buf[MAX_URL_SIZE], buf1[MAX_URL_SIZE], *q;
     unsigned char ch;
     const char *p;
-    int ret, content_length, line_count = 0, request = 0;
-    unsigned char *content = NULL;
+    int ret, content_length, line_count, request;
+    unsigned char *content;
 
 start:
     line_count = 0;
@@ -1195,14 +1197,17 @@ start:
             ret = ffurl_read_complete(rt->rtsp_hd, &ch, 1);
             av_log(s, AV_LOG_TRACE, "ret=%d c=%02x [%c]\n", ret, ch, ch);
             if (ret != 1)
-                return AVERROR_EOF;
+                return ret < 0 ? ret : AVERROR(EIO);
             if (ch == '\n')
                 break;
             if (ch == '$' && q == buf) {
                 if (return_on_interleaved_data) {
                     return 1;
-                } else
-                    ff_rtsp_skip_packet(s);
+                } else {
+                    ret = ff_rtsp_skip_packet(s);
+                    if (ret < 0)
+                        return ret;
+                }
             } else if (ch != '\r') {
                 if ((q - buf) < sizeof(buf) - 1)
                     *q++ = ch;
@@ -1245,8 +1250,10 @@ start:
         content = av_malloc(content_length + 1);
         if (!content)
             return AVERROR(ENOMEM);
-        if (ffurl_read_complete(rt->rtsp_hd, content, content_length) != content_length)
-            return AVERROR(EIO);
+        if ((ret = ffurl_read_complete(rt->rtsp_hd, content, content_length)) != content_length) {
+            av_freep(&content);
+            return ret < 0 ? ret : AVERROR(EIO);
+        }
         content[content_length] = '\0';
     }
     if (content_ptr)
