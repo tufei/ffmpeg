@@ -564,9 +564,8 @@ static int set_context_streams_from_tracks(AVFormatContext *s)
         /* Copy stream information */
         asset_stream = avformat_new_stream(s, NULL);
         if (!asset_stream) {
-            ret = AVERROR(ENOMEM);
             av_log(s, AV_LOG_ERROR, "Could not create stream\n");
-            break;
+            return AVERROR(ENOMEM);
         }
         asset_stream->id = i;
         ret = avcodec_parameters_copy(asset_stream->codecpar, first_resource_stream->codecpar);
@@ -625,8 +624,11 @@ static int imf_read_header(AVFormatContext *s)
     tmp_str = av_strdup(s->url);
     if (!tmp_str)
         return AVERROR(ENOMEM);
+    c->base_url = av_strdup(av_dirname(tmp_str));
+    av_freep(&tmp_str);
+    if (!c->base_url)
+        return AVERROR(ENOMEM);
 
-    c->base_url = av_dirname(tmp_str);
     if ((ret = ffio_copy_url_options(s->pb, &c->avio_opts)) < 0)
         return ret;
 
@@ -889,6 +891,7 @@ static const AVClass imf_class = {
 const AVInputFormat ff_imf_demuxer = {
     .name           = "imf",
     .long_name      = NULL_IF_CONFIG_SMALL("IMF (Interoperable Master Format)"),
+    .flags          = AVFMT_EXPERIMENTAL,
     .flags_internal = FF_FMT_INIT_CLEANUP,
     .priv_class     = &imf_class,
     .priv_data_size = sizeof(IMFContext),
