@@ -3693,6 +3693,7 @@ openclsrc_filter_deps="opencl"
 overlay_opencl_filter_deps="opencl"
 overlay_qsv_filter_deps="libmfx"
 overlay_qsv_filter_select="qsvvpp"
+overlay_vaapi_filter_deps="vaapi VAProcPipelineCaps_blend_flags"
 overlay_vulkan_filter_deps="vulkan spirv_compiler"
 owdenoise_filter_deps="gpl"
 pad_opencl_filter_deps="opencl"
@@ -3797,20 +3798,20 @@ cws2fws_extralibs="zlib_extralibs"
 
 # libraries, in any order
 avcodec_deps="avutil"
-avcodec_suggest="libm"
+avcodec_suggest="libm stdatomic"
 avdevice_deps="avformat avcodec avutil"
-avdevice_suggest="libm"
+avdevice_suggest="libm stdatomic"
 avfilter_deps="avutil"
-avfilter_suggest="libm"
+avfilter_suggest="libm stdatomic"
 avformat_deps="avcodec avutil"
-avformat_suggest="libm network zlib"
-avutil_suggest="clock_gettime ffnvcodec libm libdrm libmfx opencl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt"
+avformat_suggest="libm network zlib stdatomic"
+avutil_suggest="clock_gettime ffnvcodec libm libdrm libmfx opencl user32 vaapi vulkan videotoolbox corefoundation corevideo coremedia bcrypt stdatomic"
 postproc_deps="avutil gpl"
-postproc_suggest="libm"
+postproc_suggest="libm stdatomic"
 swresample_deps="avutil"
-swresample_suggest="libm libsoxr"
+swresample_suggest="libm libsoxr stdatomic"
 swscale_deps="avutil"
-swscale_suggest="libm"
+swscale_suggest="libm stdatomic"
 
 avcodec_extralibs="pthreads_extralibs iconv_extralibs dxva2_extralibs"
 avfilter_extralibs="pthreads_extralibs"
@@ -6327,7 +6328,14 @@ check_headers asm/types.h
 # it seems there are versions of clang in some distros that try to use the
 # gcc headers, which explodes for stdatomic
 # so we also check that atomics actually work here
-check_builtin stdatomic stdatomic.h "atomic_int foo, bar = ATOMIC_VAR_INIT(-1); atomic_store(&foo, 0); foo += bar"
+#
+# some configurations also require linking to libatomic, so try
+# both with -latomic and without
+for LATOMIC in "-latomic" ""; do
+    check_builtin stdatomic stdatomic.h                                                 \
+        "atomic_int foo, bar = ATOMIC_VAR_INIT(-1); atomic_store(&foo, 0); foo += bar"  \
+        $LATOMIC && eval stdatomic_extralibs="\$LATOMIC" && break
+done
 
 check_lib advapi32 "windows.h"            RegCloseKey          -ladvapi32
 check_lib bcrypt   "windows.h bcrypt.h"   BCryptGenRandom      -lbcrypt &&
@@ -6892,6 +6900,7 @@ if enabled vaapi; then
     check_struct "va/va.h" "VADecPictureParameterBufferAV1" bit_depth_idx
     check_type   "va/va.h va/va_vpp.h" "VAProcFilterParameterBufferHDRToneMapping"
     check_struct "va/va.h va/va_vpp.h" "VAProcPipelineCaps" rotation_flags
+    check_struct "va/va.h va/va_vpp.h" "VAProcPipelineCaps" blend_flags
     check_type "va/va.h va/va_enc_hevc.h" "VAEncPictureParameterBufferHEVC"
     check_type "va/va.h va/va_enc_jpeg.h" "VAEncPictureParameterBufferJPEG"
     check_type "va/va.h va/va_enc_vp8.h"  "VAEncPictureParameterBufferVP8"
