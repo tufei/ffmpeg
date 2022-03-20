@@ -105,13 +105,8 @@ int ff_proc_from_frame_to_dnn(AVFrame *frame, DNNData *input, void *log_ctx)
         return AVERROR(EINVAL);
     }
     if (input->dt != DNN_FLOAT) {
-<<<<<<< HEAD
         avpriv_report_missing_feature(log_ctx, "data type other than DNN_FLOAT");
-        return DNN_ERROR;
-=======
-        avpriv_report_missing_feature(log_ctx, "data type rather than DNN_FLOAT");
         return AVERROR(ENOSYS);
->>>>>>> master
     }
 
     switch (frame->format) {

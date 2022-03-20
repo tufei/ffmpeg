@@ -141,8 +141,7 @@ static const AVOption dnn_onnxruntime_options[] = {
 
 AVFILTER_DEFINE_CLASS(dnn_onnxruntime);
 
-static DNNReturnType execute_model_ort(ORTRequestItem *request,
-                                       Queue *lltask_queue);
+static int execute_model_ort(ORTRequestItem *request, Queue *lltask_queue);
 static void infer_completion_callback(void *args);
 static inline void destroy_request_item(ORTRequestItem **arg);
 
@@ -188,7 +187,7 @@ static ORTInferRequest *ort_create_inference_request(const OrtApi *ort)
     return infer_request;
 }
 
-static DNNReturnType ort_start_inference(void *args)
+static int ort_start_inference(void *args)
 {
     ORTRequestItem *request = args;
     ORTInferRequest *infer_request = request->infer_request;
@@ -200,7 +199,7 @@ static DNNReturnType ort_start_inference(void *args)
 
     if (!request) {
         av_log(&ort_model->ctx, AV_LOG_ERROR, "ORTRequestItem is NULL\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->Run(ort_model->session, NULL, &task->input_name,
@@ -214,10 +213,10 @@ static DNNReturnType ort_start_inference(void *args)
         if (ff_safe_queue_push_back(ort_model->request_queue, request) < 0) {
             destroy_request_item(&request);
         }
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
-    return DNN_SUCCESS;
+    return 0;
 }
 
 static inline void destroy_request_item(ORTRequestItem **arg) {
@@ -232,8 +231,7 @@ static inline void destroy_request_item(ORTRequestItem **arg) {
     av_freep(arg);
 }
 
-static DNNReturnType extract_lltask_from_task(TaskItem *task,
-                                              Queue *lltask_queue)
+static int extract_lltask_from_task(TaskItem *task, Queue *lltask_queue)
 {
     ORTModel *ort_model = task->model;
     ORTContext *ctx = &ort_model->ctx;
@@ -241,7 +239,7 @@ static DNNReturnType extract_lltask_from_task(TaskItem *task,
     if (!lltask) {
         av_log(ctx, AV_LOG_ERROR,
                "Unable to allocate space for LastLevelTaskItem\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     task->inference_todo = 1;
     task->inference_done = 0;
@@ -249,14 +247,13 @@ static DNNReturnType extract_lltask_from_task(TaskItem *task,
     if (ff_queue_push_back(lltask_queue, lltask) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to push back lltask_queue.\n");
         av_freep(&lltask);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
-    return DNN_SUCCESS;
+    return 0;
 }
 
-static DNNReturnType allocate_input_tensor(ORTModel *ort_model,
-                                           const DNNData *input,
-                                           OrtValue **out)
+static int allocate_input_tensor(ORTModel *ort_model, const DNNData *input,
+                                 OrtValue **out)
 {
     ORTContext *ctx = &ort_model->ctx;
     const OrtApi *ort = ort_model->ort;
@@ -283,7 +280,7 @@ static DNNReturnType allocate_input_tensor(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "CreateTensorAsOrtValue(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->IsTensor(*out, &is_tensor);
@@ -291,15 +288,15 @@ static DNNReturnType allocate_input_tensor(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "IsTensor(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     av_assert0(1 == is_tensor);
 
-    return DNN_SUCCESS;
+    return 0;
 }
 
-static DNNReturnType get_output_tensor(void *model, DNNData * const output,
-                                       OrtValue *output_tensor)
+static int get_output_tensor(void *model, DNNData * const output,
+                             OrtValue *output_tensor)
 {
     ORTModel *ort_model = (ORTModel *)model;
     ORTContext *ctx = &ort_model->ctx;
@@ -315,7 +312,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         av_log(ctx, AV_LOG_ERROR, "GetTensorTypeAndShape(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->GetTensorElementType(tensor, &data_type);
@@ -323,7 +320,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         av_log(ctx, AV_LOG_ERROR, "GetTensorElementType(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     switch (data_type) {
     case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
@@ -334,7 +331,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         break;
     default:
         av_log(ctx, AV_LOG_ERROR, "Unsupported tensor element data type\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->GetDimensionsCount(tensor, &num_dims);
@@ -342,7 +339,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         av_log(ctx, AV_LOG_ERROR, "GetDimensionsCount(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     av_assert0(4 == num_dims);
 
@@ -351,7 +348,7 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         av_log(ctx, AV_LOG_ERROR, "GetDimensionsCount(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     ort->ReleaseTensorTypeAndShapeInfo(tensor);
@@ -366,14 +363,13 @@ static DNNReturnType get_output_tensor(void *model, DNNData * const output,
         av_log(ctx, AV_LOG_ERROR, "GetTensorMutableData(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
-    return DNN_SUCCESS;
+    return 0;
 }
 
-static DNNReturnType get_input_ort(void *model, DNNData *input,
-                                   const char *input_name)
+static int get_input_ort(void *model, DNNData *input, const char *input_name)
 {
     ORTModel *ort_model = (ORTModel *)model;
     ORTContext *ctx = &ort_model->ctx;
@@ -392,7 +388,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         av_log(ctx, AV_LOG_ERROR, "SessionGetInputCount(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     for (size_t i = 0; i < num_inputs; ++i) {
         char *index_name = NULL;
@@ -403,7 +399,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
             av_log(ctx, AV_LOG_ERROR, "SessionGetInputName(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
         str_cmp = strncmp(input_name, index_name, 1024);
         *status = ort->AllocatorFree(ort_model->allocator, index_name);
@@ -411,7 +407,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
             av_log(ctx, AV_LOG_ERROR, "AllocatorFree(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
         if (0 == str_cmp) {
             index = i;
@@ -420,7 +416,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
     }
     if (-1 == index) {
         av_log(ctx, AV_LOG_ERROR, "Could not find \"%s\" in model\n", input_name);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SessionGetInputTypeInfo(ort_model->session, index, &type);
@@ -428,14 +424,14 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         av_log(ctx, AV_LOG_ERROR, "SessionGetInputTypeInfo(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     *status = ort->CastTypeInfoToTensorInfo(type, &tensor);
     if (*status) {
         av_log(ctx, AV_LOG_ERROR, "CastTypeInfoToTensorInfo(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->GetTensorElementType(tensor, &data_type);
@@ -443,7 +439,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         av_log(ctx, AV_LOG_ERROR, "GetTensorElementType(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     switch (data_type) {
     case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
@@ -454,7 +450,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         break;
     default:
         av_log(ctx, AV_LOG_ERROR, "Unsupported tensor element data type\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->GetDimensionsCount(tensor, &num_dims);
@@ -462,7 +458,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         av_log(ctx, AV_LOG_ERROR, "GetDimensionsCount(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     av_assert0(4 == num_dims);
 
@@ -471,7 +467,7 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
         av_log(ctx, AV_LOG_ERROR, "GetDimensionsCount(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     ort->ReleaseTypeInfo(type);
@@ -481,15 +477,15 @@ static DNNReturnType get_input_ort(void *model, DNNData *input,
     input->height = dims[2];
     input->width = dims[3];
 
-    return DNN_SUCCESS;
+    return 0;
 }
 
-static DNNReturnType get_output_ort(void *model, const char *input_name,
-                                    int input_width, int input_height,
-                                    const char *output_name,
-                                    int *output_width, int *output_height)
+static int get_output_ort(void *model, const char *input_name,
+                          int input_width, int input_height,
+                          const char *output_name,
+                          int *output_width, int *output_height)
 {
-    DNNReturnType ret;
+    int ret;
     ORTModel *ort_model = (ORTModel *)model;
     ORTContext *ctx = &ort_model->ctx;
     TaskItem task;
@@ -503,20 +499,20 @@ static DNNReturnType get_output_ort(void *model, const char *input_name,
     };
 
     if (ff_dnn_fill_gettingoutput_task(&task, &exec_params, ort_model,
-                                       input_height, input_width, ctx) != DNN_SUCCESS) {
+                                       input_height, input_width, ctx) != 0) {
         goto err;
     }
 
-    if (extract_lltask_from_task(&task, ort_model->lltask_queue) != DNN_SUCCESS) {
+    if (extract_lltask_from_task(&task, ort_model->lltask_queue) != 0) {
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
-        ret = DNN_ERROR;
+        ret = DNN_GENERIC_ERROR;
         goto err;
     }
 
     request = ff_safe_queue_pop_front(ort_model->request_queue);
     if (!request) {
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        ret = DNN_ERROR;
+        ret = DNN_GENERIC_ERROR;
         goto err;
     }
 
@@ -530,8 +526,7 @@ err:
     return ret;
 }
 
-static DNNReturnType load_ort_model(ORTModel *ort_model,
-                                    const char *model_filename)
+static int load_ort_model(ORTModel *ort_model, const char *model_filename)
 {
     ORTContext *ctx = &ort_model->ctx;
     const OrtApi *ort = NULL;
@@ -541,13 +536,13 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
     oab = OrtGetApiBase();
     if (NULL == oab) {
         av_log(ctx, AV_LOG_ERROR, "Error calling OrtGetApiBase()\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     ort_model->ort = oab->GetApi(ORT_API_VERSION);
     if (NULL == ort_model->ort) {
         av_log(ctx, AV_LOG_ERROR, "Error calling GetApi()\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     ort = ort_model->ort;
 
@@ -557,7 +552,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "CreateEnv(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->CreateSessionOptions(&ort_model->options);
@@ -565,7 +560,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "CreateSessionOptions(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SetSessionExecutionMode(ort_model->options,
@@ -574,7 +569,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetSessionExecutionMode(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     if (ORT_SEQUENTIAL == ctx->options.execute_mode) {
@@ -583,7 +578,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
             av_log(ctx, AV_LOG_ERROR, "EnableMemPattern(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
     }
 
@@ -594,7 +589,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
             av_log(ctx, AV_LOG_ERROR, "EnableProfiling(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
     } else {
         *status = ort->DisableProfiling(ort_model->options);
@@ -602,7 +597,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
             av_log(ctx, AV_LOG_ERROR, "DisableProfiling(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
     }
 
@@ -613,7 +608,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
             av_log(ctx, AV_LOG_ERROR, "SetSessionLogId(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
     }
 
@@ -630,7 +625,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
             av_log(ctx, AV_LOG_ERROR, "SessionOptionsAppendExecutionProvider_CUDA(): %s\n",
                    ort->GetErrorMessage(*status));
             ort->ReleaseStatus(*status);
-            return DNN_ERROR;
+            return DNN_GENERIC_ERROR;
         }
     }
 
@@ -640,7 +635,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetSessionLogVerbosityLevel(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SetSessionLogSeverityLevel(ort_model->options,
@@ -649,7 +644,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetSessionLogSeverityLevel(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SetSessionGraphOptimizationLevel(ort_model->options,
@@ -658,7 +653,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetSessionGraphOptimizationLevel(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SetIntraOpNumThreads(ort_model->options,
@@ -667,7 +662,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetIntraOpNumThreads(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->SetInterOpNumThreads(ort_model->options,
@@ -676,7 +671,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "SetInterOpNumThreads(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->EnableCpuMemArena(ort_model->options);
@@ -684,7 +679,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "EnableCpuMemArena(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->GetAllocatorWithDefaultOptions(&ort_model->allocator);
@@ -692,7 +687,7 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "GetAllocatorWithDefaultOptions(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     *status = ort->CreateSession(ort_model->env, model_filename,
@@ -701,10 +696,10 @@ static DNNReturnType load_ort_model(ORTModel *ort_model,
         av_log(ctx, AV_LOG_ERROR, "CreateSession(): %s\n",
                ort->GetErrorMessage(*status));
         ort->ReleaseStatus(*status);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
-    return DNN_SUCCESS;
+    return 0;
 }
 
 DNNModel *ff_dnn_load_model_ort(const char *model_filename,
@@ -737,7 +732,7 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
         goto err;
     }
 
-    if (load_ort_model(ort_model, model_filename) != DNN_SUCCESS) {
+    if (load_ort_model(ort_model, model_filename) != 0) {
         goto err;
     }
 
@@ -806,8 +801,7 @@ err:
     return NULL;
 }
 
-static DNNReturnType fill_model_input_ort(ORTModel *ort_model,
-                                          ORTRequestItem *request)
+static int fill_model_input_ort(ORTModel *ort_model, ORTRequestItem *request)
 {
     DNNData input;
     LastLevelTaskItem *lltask;
@@ -823,7 +817,7 @@ static DNNReturnType fill_model_input_ort(ORTModel *ort_model,
     task = lltask->task;
     request->lltask = lltask;
 
-    if (get_input_ort(ort_model, &input, task->input_name) != DNN_SUCCESS) {
+    if (get_input_ort(ort_model, &input, task->input_name) != 0) {
         goto err;
     }
 
@@ -831,7 +825,7 @@ static DNNReturnType fill_model_input_ort(ORTModel *ort_model,
     input.height = task->in_frame->height;
     input.width = task->in_frame->width;
 
-    if (DNN_SUCCESS != allocate_input_tensor(ort_model, &input,
+    if (0 != allocate_input_tensor(ort_model, &input,
                                              &infer_request->input_tensor)) {
         av_log(ctx, AV_LOG_ERROR, "Cannot allocate memory for input tensor\n");
         goto err;
@@ -887,10 +881,10 @@ static DNNReturnType fill_model_input_ort(ORTModel *ort_model,
         goto err;
     }
 
-    return DNN_SUCCESS;
+    return 0;
 err:
     ort_free_request(infer_request);
-    return DNN_ERROR;
+    return DNN_GENERIC_ERROR;
 }
 
 static void infer_completion_callback(void *args) {
@@ -914,7 +908,7 @@ static void infer_completion_callback(void *args) {
     }
     av_assert0(1 == is_tensor);
 
-    if (DNN_SUCCESS != get_output_tensor(ort_model, &output,
+    if (0 != get_output_tensor(ort_model, &output,
                                          infer_request->output_tensor)) {
         av_log(ctx, AV_LOG_ERROR, "Cannot get output\n");
         goto err;
@@ -959,8 +953,7 @@ err:
     }
 }
 
-static DNNReturnType execute_model_ort(ORTRequestItem *request,
-                                       Queue *lltask_queue)
+static int execute_model_ort(ORTRequestItem *request, Queue *lltask_queue)
 {
     ORTModel *ort_model;
     ORTContext *ctx;
@@ -969,7 +962,7 @@ static DNNReturnType execute_model_ort(ORTRequestItem *request,
 
     if (ff_queue_size(lltask_queue) == 0) {
         destroy_request_item(&request);
-        return DNN_SUCCESS;
+        return 0;
     }
 
     lltask = ff_queue_peek_front(lltask_queue);
@@ -977,34 +970,34 @@ static DNNReturnType execute_model_ort(ORTRequestItem *request,
     ort_model = task->model;
     ctx = &ort_model->ctx;
 
-    if (fill_model_input_ort(ort_model, request) != DNN_SUCCESS) {
+    if (fill_model_input_ort(ort_model, request) != 0) {
         goto err;
     }
 
     if (task->async) {
         if (ff_dnn_start_inference_async(ctx, &request->exec_module) !=
-            DNN_SUCCESS) {
+            0) {
             goto err;
         }
-        return DNN_SUCCESS;
+        return 0;
     } else {
-        if (ort_start_inference(request) != DNN_SUCCESS) {
+        if (ort_start_inference(request) != 0) {
             goto err;
         }
         infer_completion_callback(request);
         return task->inference_done == task->inference_todo ?
-               DNN_SUCCESS : DNN_ERROR;
+               0 : DNN_GENERIC_ERROR;
     }
 err:
     ort_free_request(request->infer_request);
     if (ff_safe_queue_push_back(ort_model->request_queue, request) < 0) {
         destroy_request_item(&request);
     }
-    return DNN_ERROR;
+    return DNN_GENERIC_ERROR;
 }
 
-DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
-                                       DNNExecBaseParams *exec_params)
+int ff_dnn_execute_model_ort(const DNNModel *model,
+                             DNNExecBaseParams *exec_params)
 {
     ORTModel *ort_model = (ORTModel *)model->model;
     ORTContext *ctx = &ort_model->ctx;
@@ -1012,36 +1005,36 @@ DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
     ORTRequestItem *request;
 
     if (ff_check_exec_params(ctx, DNN_ORT, model->func_type, exec_params) != 0) {
-         return DNN_ERROR;
+         return DNN_GENERIC_ERROR;
     }
 
     task = av_malloc(sizeof(*task));
     if (!task) {
         av_log(ctx, AV_LOG_ERROR, "unable to alloc memory for task item.\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     if (ff_dnn_fill_task(task, exec_params, ort_model, ctx->options.async, 1) !=
-        DNN_SUCCESS) {
+        0) {
         av_freep(&task);
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     if (ff_queue_push_back(ort_model->task_queue, task) < 0) {
         av_freep(&task);
         av_log(ctx, AV_LOG_ERROR, "unable to push back task_queue.\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
-    if (extract_lltask_from_task(task, ort_model->lltask_queue) != DNN_SUCCESS) {
+    if (extract_lltask_from_task(task, ort_model->lltask_queue) != 0) {
         av_log(ctx, AV_LOG_ERROR, "unable to extract last level task from task.\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     request = ff_safe_queue_pop_front(ort_model->request_queue);
     if (!request) {
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
     return execute_model_ort(request, ort_model->lltask_queue);
 }
@@ -1053,26 +1046,26 @@ DNNAsyncStatusType ff_dnn_get_result_ort(const DNNModel *model, AVFrame **in,
     return ff_dnn_get_result_common(ort_model->task_queue, in, out);
 }
 
-DNNReturnType ff_dnn_flush_ort(const DNNModel *model)
+int ff_dnn_flush_ort(const DNNModel *model)
 {
     ORTModel *ort_model = model->model;
     ORTContext *ctx = &ort_model->ctx;
     ORTRequestItem *request;
-    DNNReturnType ret;
+    int ret;
 
     if (ff_queue_size(ort_model->lltask_queue) == 0) {
         // no pending task need to flush
-        return DNN_SUCCESS;
+        return 0;
     }
 
     request = ff_safe_queue_pop_front(ort_model->request_queue);
     if (!request) {
         av_log(ctx, AV_LOG_ERROR, "unable to get infer request.\n");
-        return DNN_ERROR;
+        return DNN_GENERIC_ERROR;
     }
 
     ret = fill_model_input_ort(ort_model, request);
-    if (ret != DNN_SUCCESS) {
+    if (ret != 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to fill model input.\n");
         if (ff_safe_queue_push_back(ort_model->request_queue, request) < 0) {
             destroy_request_item(&request);

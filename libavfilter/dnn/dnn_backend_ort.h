@@ -34,13 +34,13 @@ DNNModel *ff_dnn_load_model_ort(const char *model_filename,
                                 const char *options,
                                 AVFilterContext *filter_ctx);
 
-DNNReturnType ff_dnn_execute_model_ort(const DNNModel *model,
-                                       DNNExecBaseParams *exec_params);
+int ff_dnn_execute_model_ort(const DNNModel *model,
+                             DNNExecBaseParams *exec_params);
 
 DNNAsyncStatusType ff_dnn_get_result_ort(const DNNModel *model, AVFrame **in,
                                          AVFrame **out);
 
-DNNReturnType ff_dnn_flush_ort(const DNNModel *model);
+int ff_dnn_flush_ort(const DNNModel *model);
 
 void ff_dnn_free_model_ort(DNNModel **model);
 
