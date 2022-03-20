@@ -258,6 +258,15 @@ static const AVOption options[] = {
 #if QSV_VERSION_ATLEAST(1, 26)
     { "transform_skip", "Turn this option ON to enable transformskip",   OFFSET(qsv.transform_skip),          AV_OPT_TYPE_INT,    { .i64 = -1},   -1, 1,  VE},
 #endif
+    { "int_ref_type", "Intra refresh type. B frames should be set to 0",         OFFSET(qsv.int_ref_type),            AV_OPT_TYPE_INT, { .i64 = -1 }, -1, UINT16_MAX, VE, "int_ref_type" },
+        { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, .flags = VE, "int_ref_type" },
+        { "vertical", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, .flags = VE, "int_ref_type" },
+        { "horizontal", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 }, .flags = VE, "int_ref_type" },
+    { "int_ref_cycle_size", "Number of frames in the intra refresh cycle",       OFFSET(qsv.int_ref_cycle_size),      AV_OPT_TYPE_INT, { .i64 = -1 },               -1, UINT16_MAX, VE },
+    { "int_ref_qp_delta",   "QP difference for the refresh MBs",                 OFFSET(qsv.int_ref_qp_delta),        AV_OPT_TYPE_INT, { .i64 = INT16_MIN }, INT16_MIN,  INT16_MAX, VE },
+#if QSV_VERSION_ATLEAST(1, 16)
+    { "int_ref_cycle_dist",   "Distance between the beginnings of the intra-refresh cycles in frames",  OFFSET(qsv.int_ref_cycle_dist),      AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT16_MAX, VE },
+#endif
 
     { NULL },
 };
@@ -295,6 +304,12 @@ const AVCodec ff_hevc_qsv_encoder = {
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_NV12,
                                                     AV_PIX_FMT_P010,
                                                     AV_PIX_FMT_QSV,
+#if QSV_VERSION_ATLEAST(1, 17)
+                                                    AV_PIX_FMT_BGRA,
+#endif
+#if QSV_VERSION_ATLEAST(1, 9)
+                                                    AV_PIX_FMT_X2RGB10,
+#endif
                                                     AV_PIX_FMT_NONE },
     .priv_class     = &class,
     .defaults       = qsv_enc_defaults,

@@ -49,13 +49,16 @@
 #include "internal.h"
 #include "avcodec.h"
 #include "mpegutils.h"
-#include "h264dec.h"
 #include "h264data.h"
+#include "h264dsp.h"
+#include "h264pred.h"
+#include "h264_parse.h"
 #include "golomb.h"
 #include "hpeldsp.h"
 #include "mathops.h"
 #include "rectangle.h"
 #include "tpeldsp.h"
+#include "videodsp.h"
 
 #if CONFIG_ZLIB
 #include <zlib.h>
@@ -1598,5 +1601,5 @@ const AVCodec ff_svq3_decoder = {
                       AV_CODEC_CAP_DELAY,
     .pix_fmts       = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUVJ420P,
                                                      AV_PIX_FMT_NONE},
-    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
+    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP,
 };
