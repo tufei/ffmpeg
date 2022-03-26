@@ -30,6 +30,7 @@
 #include "config_components.h"
 
 #include "avcodec.h"
+#include "codec_internal.h"
 #include "error_resilience.h"
 #include "flvdec.h"
 #include "h263.h"
@@ -694,12 +695,12 @@ frame_end:
         if ((ret = av_frame_ref(pict, s->current_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->current_picture_ptr, pict);
-        ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+        ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
     } else if (s->last_picture_ptr) {
         if ((ret = av_frame_ref(pict, s->last_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->last_picture_ptr, pict);
-        ff_mpv_export_qp_table(s, pict, s->last_picture_ptr, FF_QSCALE_TYPE_MPEG1);
+        ff_mpv_export_qp_table(s, pict, s->last_picture_ptr, FF_MPV_QSCALE_TYPE_MPEG1);
     }
 
     if (s->last_picture_ptr || s->low_delay) {
@@ -754,16 +755,16 @@ static const AVCodecHWConfigInternal *const h263_hw_config_list[] = {
     NULL
 };
 
-const AVCodec ff_h263_decoder = {
-    .name           = "h263",
-    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
-    .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = AV_CODEC_ID_H263,
+const FFCodec ff_h263_decoder = {
+    .p.name         = "h263",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
+    .p.type         = AVMEDIA_TYPE_VIDEO,
+    .p.id           = AV_CODEC_ID_H263,
     .priv_data_size = sizeof(MpegEncContext),
     .init           = ff_h263_decode_init,
     .close          = ff_h263_decode_end,
     .decode         = ff_h263_decode_frame,
-    .capabilities   = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
+    .p.capabilities = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
 #if FF_API_FLAG_TRUNCATED
                       AV_CODEC_CAP_TRUNCATED |
 #endif
@@ -771,21 +772,21 @@ const AVCodec ff_h263_decoder = {
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
                       FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
     .flush          = ff_mpeg_flush,
-    .max_lowres     = 3,
-    .pix_fmts       = ff_h263_hwaccel_pixfmt_list_420,
+    .p.max_lowres   = 3,
+    .p.pix_fmts     = ff_h263_hwaccel_pixfmt_list_420,
     .hw_configs     = h263_hw_config_list,
 };
 
-const AVCodec ff_h263p_decoder = {
-    .name           = "h263p",
-    .long_name      = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
-    .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = AV_CODEC_ID_H263P,
+const FFCodec ff_h263p_decoder = {
+    .p.name         = "h263p",
+    .p.long_name    = NULL_IF_CONFIG_SMALL("H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2"),
+    .p.type         = AVMEDIA_TYPE_VIDEO,
+    .p.id           = AV_CODEC_ID_H263P,
     .priv_data_size = sizeof(MpegEncContext),
     .init           = ff_h263_decode_init,
     .close          = ff_h263_decode_end,
     .decode         = ff_h263_decode_frame,
-    .capabilities   = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
+    .p.capabilities = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
 #if FF_API_FLAG_TRUNCATED
                       AV_CODEC_CAP_TRUNCATED |
 #endif
@@ -793,7 +794,7 @@ const AVCodec ff_h263p_decoder = {
     .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE |
                       FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
     .flush          = ff_mpeg_flush,
-    .max_lowres     = 3,
-    .pix_fmts       = ff_h263_hwaccel_pixfmt_list_420,
+    .p.max_lowres   = 3,
+    .p.pix_fmts     = ff_h263_hwaccel_pixfmt_list_420,
     .hw_configs     = h263_hw_config_list,
 };
