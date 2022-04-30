@@ -23,15 +23,11 @@
  * Compute a look-up table from map of colors.
  */
 
-#include "config_components.h"
-
 #include "libavutil/attributes.h"
-#include "libavutil/avstring.h"
+#include "libavutil/avassert.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
-#include "libavutil/pixdesc.h"
 #include "avfilter.h"
-#include "formats.h"
 #include "internal.h"
 #include "framesync.h"
 #include "video.h"
@@ -62,6 +58,10 @@ typedef struct ColorMapContext {
     float (*kernel)(const float *x, const float *y);
 
     FFFrameSync fs;
+
+    double A[(MAX_SIZE + 4) * (MAX_SIZE + 4)];
+    double b[MAX_SIZE + 4];
+    int pivot[MAX_SIZE + 4];
 } ColorMapContext;
 
 #define OFFSET(x) offsetof(ColorMapContext, x)
@@ -69,7 +69,7 @@ typedef struct ColorMapContext {
 
 static const AVOption colormap_options[] = {
     { "patch_size", "set patch size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "64x64"}, 0, 0, FLAGS },
-    { "nb_patches", "set number of patches", OFFSET(size), AV_OPT_TYPE_INT, {.i64 = 8}, 1, MAX_SIZE, FLAGS },
+    { "nb_patches", "set number of patches", OFFSET(size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, MAX_SIZE, FLAGS },
     { "type", "set the target type used",  OFFSET(target_type), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS, "type" },
     {   "relative", "the target colors are relative", 0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 1, FLAGS, "type" },
     {   "absolute", "the target colors are absolute", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 1, FLAGS, "type" },
@@ -125,8 +125,7 @@ static void gauss_solve_triangular(const double *A, const int *p, double *b, int
     }
 
     for(int k = n - 1; k > 0; k--) {
-        b[k] /= A[k + n * k];
-        double t = b[k];
+        double t = b[k] /= A[k + n * k];
         for (int i = 0; i < k; i++)
             b[i] -= A[k + n * i] * t;
     }
@@ -136,19 +135,14 @@ static void gauss_solve_triangular(const double *A, const int *p, double *b, int
 
 static int gauss_solve(double *A, double *b, int n)
 {
-    int *p = av_calloc(n, sizeof(*p));
+    int p[3] = { 0 };
 
-    if (!p)
-        return 1;
+    av_assert2(n <= FF_ARRAY_ELEMS(p));
 
-    if (!gauss_make_triangular(A, p, n)) {
-        av_freep(&p);
+    if (!gauss_make_triangular(A, p, n))
         return 1;
-    }
 
     gauss_solve_triangular(A, p, b, n);
-
-    av_freep(&p);
 
     return 0;
 }
@@ -262,12 +256,9 @@ static void build_map(AVFilterContext *ctx)
             {
                 const int N = s->nb_maps;
                 const int N4 = N + 4;
-                double *A = av_calloc(sizeof(*A), N4 * N4);
-                double *b = av_calloc(sizeof(*b), N4);
-                int *pivot = NULL;
-
-                if (!A || !b)
-                    goto error;
+                double *A = s->A;
+                double *b = s->b;
+                int *pivot = s->pivot;
 
                 for (int j = 0; j < N; j++)
                     for (int i = j; i < N; i++)
@@ -286,10 +277,6 @@ static void build_map(AVFilterContext *ctx)
                     for (int i = N;i < N4; i++)
                         A[j * N4 + i] = 0.;
 
-                pivot = av_calloc(N4, sizeof(*pivot));
-                if (!pivot)
-                    goto error;
-
                 if (gauss_make_triangular(A, pivot, N4)) {
                     for (int i = 0; i < N; i++)
                         b[i] = s->target[i][c];
@@ -304,10 +291,6 @@ static void build_map(AVFilterContext *ctx)
                     for (int i = 0; i < 4; i++)
                         s->icoeff[i][c] = b[N + i];
                 }
-error:
-                av_free(pivot);
-                av_free(b);
-                av_free(A);
             }
         }
     }
@@ -428,6 +411,8 @@ static int import_map(AVFilterLink *inlink, AVFrame *in)
 
     if (changed)
         s->changed[is_target] = 1;
+    if (!s->size)
+        s->size = FFMIN(idx, MAX_SIZE);
     if (!is_target)
         s->nb_maps = FFMIN(idx, s->size);
 
@@ -542,6 +527,13 @@ static int activate(AVFilterContext *ctx)
     return ff_framesync_activate(&s->fs);
 }
 
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    ColorMapContext *const s = ctx->priv;
+
+    ff_framesync_uninit(&s->fs);
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name = "default",
@@ -579,4 +571,5 @@ const AVFilter ff_vf_colormap = {
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
+    .uninit        = uninit,
 };
