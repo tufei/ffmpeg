@@ -1,4 +1,16 @@
 
+ifneq ($(strip $(KEEP)),)
+ifneq ($(strip $(KEEP)),0)
+# KEEP_FILES is normally undefined; it is set to 2 # if the user requested
+# to keep all intermediate FATE-files by setting KEEP.
+# For some tests it is also set to 1 if it is unset; this indicates
+# that only some intermediate files (namely only non-raw files)
+# are to be kept. This allows reusing these intermediate files as input
+# files for other tests (mostly the seek-tests).
+KEEP_FILES = 2
+endif
+endif
+
 THREADS = 1
 VREF = tests/vsynth1/00.pgm
 AREF = tests/data/asynth1.sw
@@ -88,6 +100,10 @@ REMUX = $(call ALLYES, $(firstword $(1))_MUXER $(lastword $(1))_DEMUXER \
 
 DEMDEC  = $(call ALLYES, $(1)_DEMUXER $(2:%=%_DECODER) $(3) FILE_PROTOCOL)
 ENCMUX  = $(call ALLYES, $(1:%=%_ENCODER) $(2)_MUXER   $(3))
+
+FRAMEMD5 = $(call ALLYES, $(1)_DEMUXER $(2:%=%_DECODER) $(3)                  \
+                          PCM_S16LE_ENCODER RAWVIDEO_ENCODER FRAMEMD5_MUXER   \
+                          PIPE_PROTOCOL FILE_PROTOCOL)
 FRAMECRC = $(call ALLYES, $(1)_DEMUXER $(2:%=%_DECODER) $(3)                  \
                           PCM_S16LE_ENCODER RAWVIDEO_ENCODER FRAMECRC_MUXER   \
                           PIPE_PROTOCOL FILE_PROTOCOL)
@@ -215,6 +231,7 @@ include $(SRC_PATH)/tests/fate/vorbis.mak
 include $(SRC_PATH)/tests/fate/vpx.mak
 include $(SRC_PATH)/tests/fate/vqf.mak
 include $(SRC_PATH)/tests/fate/wavpack.mak
+include $(SRC_PATH)/tests/fate/webm-dash-manifest.mak
 include $(SRC_PATH)/tests/fate/wma.mak
 include $(SRC_PATH)/tests/fate/xvid.mak
 
@@ -241,7 +258,7 @@ $(FATE_FFMPEG) $(FATE_FFMPEG_FFPROBE) $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMP
 $(FATE_FFPROBE) $(FATE_FFMPEG_FFPROBE) $(FATE_SAMPLES_FFPROBE) $(FATE_SAMPLES_FFMPEG_FFPROBE): ffprobe$(PROGSSUF)$(EXESUF)
 
 $(FATE_SAMPLES_FASTSTART): tools/qt-faststart$(EXESUF)
-$(FATE_SAMPLES_DUMP_DATA): tools/venc_data_dump$(EXESUF)
+$(FATE_SAMPLES_DUMP_DATA) $(FATE_SAMPLES_DUMP_DATA-yes): tools/venc_data_dump$(EXESUF)
 $(FATE_SAMPLES_SCALE_SLICE): tools/scale_slice_test$(EXESUF)
 
 ifdef SAMPLES
@@ -269,12 +286,12 @@ fate:: $(FATE)
 fate-hw: $(FATE_HW-yes)
 FATE += $(FATE_HW-yes)
 
-$(FATE) $(FATE_TESTS-no): export PROGSUF = $(PROGSSUF)
-$(FATE) $(FATE_TESTS-no): export EXECSUF = $(EXESUF)
-$(FATE) $(FATE_TESTS-no): export HOSTEXECSUF = $(HOSTEXESUF)
-$(FATE) $(FATE_TESTS-no): $(FATE_UTILS:%=tests/%$(HOSTEXESUF)) | $(FATE_OUTDIRS)
+$(FATE): export PROGSUF = $(PROGSSUF)
+$(FATE): export EXECSUF = $(EXESUF)
+$(FATE): export HOSTEXECSUF = $(HOSTEXESUF)
+$(FATE): $(FATE_UTILS:%=tests/%$(HOSTEXESUF)) | $(FATE_OUTDIRS)
 	@echo "TEST    $(@:fate-%=%)"
-	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(TARGET_SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)' '$(GEN)' '$(HWACCEL)' '$(REPORT)' '$(KEEP)'
+	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(TARGET_SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)' '$(THREADS)' '$(THREAD_TYPE)' '$(CPUFLAGS)' '$(CMP_SHIFT)' '$(CMP_TARGET)' '$(SIZE_TOLERANCE)' '$(CMP_UNIT)' '$(GEN)' '$(HWACCEL)' '$(REPORT)' '$(KEEP_FILES)'
 
 fate-list:
 	@printf '%s\n' $(sort $(FATE))
