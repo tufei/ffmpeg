@@ -163,6 +163,24 @@ FATE_MATROSKA_FFMPEG_FFPROBE-$(call REMUX, MATROSKA, MPEGTS_DEMUXER AC3_DECODER)
                                += fate-matroska-mpegts-remux
 fate-matroska-mpegts-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/mpegts/pmtchange.ts matroska "-map 0:2 -map 0:2 -c copy -disposition:a:1 -visual_impaired+hearing_impaired -default_mode infer" "-map 0 -c copy" "-show_entries stream_disposition:stream=index"
 
+FATE_MATROSKA-$(call REMUX, MATROSKA, SUP_DEMUXER) += fate-matroska-pgs-remux
+fate-matroska-pgs-remux: CMD = transcode sup $(TARGET_SAMPLES)/sub/pgs_sub.sup matroska "-copyts -c:s copy" "-copyts -c:s copy"
+
+# This test uses the setts bsf to derive the duration of every packet
+# except the last from the next packet's pts.
+FATE_MATROSKA-$(call REMUX, MATROSKA, SUP_DEMUXER PGS_FRAME_MERGE_BSF SETTS_BSF) += fate-matroska-pgs-remux-durations
+fate-matroska-pgs-remux-durations: CMD = transcode sup $(TARGET_SAMPLES)/sub/pgs_sub.sup matroska "-copyts -c:s copy -bsf pgs_frame_merge,setts=duration=if(gt(DURATION\,0)\,DURATION\,if(eq(PTS\,NOPTS)\,0\,if(eq(NEXT_PTS\,NOPTS)\,0\,NEXT_PTS-PTS))):pts=PTS" "-copyts -c:s copy"
+
+# This test muxes DVB subtitles twice into Matroska: Once normally
+# and once with durations derived via the setts filter. Said filter
+# sets the duration for every packet except the last it receives.
+# The "-t 20" also tests that the BSF is properly flushed even
+# when processing ended due to something else than the input's EOF.
+# Notice that the last packet of stream 0 before 20s is present,
+# but has no duration (like stream 1).
+FATE_MATROSKA-$(call REMUX, MATROSKA, MPEGTS_DEMUXER DVBSUB_PARSER SETTS_BSF) += fate-matroska-dvbsub-remux
+fate-matroska-dvbsub-remux: CMD = transcode mpegts $(TARGET_SAMPLES)/sub/dvbsubtest_filter.ts matroska "-map 0:s -map 0:s -t 20 -c copy -bsf:0 setts=duration=if(gt(DURATION\,0)\,DURATION\,if(eq(PTS\,NOPTS)\,0\,if(eq(NEXT_PTS\,NOPTS)\,0\,NEXT_PTS-PTS))):pts=PTS" "-map 0 -c copy"
+
 FATE_MATROSKA_FFPROBE-$(call ALLYES, MATROSKA_DEMUXER) += fate-matroska-spherical-mono
 fate-matroska-spherical-mono: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -show_entries stream_side_data_list -select_streams v -v 0 $(TARGET_SAMPLES)/mkv/spherical.mkv
 
