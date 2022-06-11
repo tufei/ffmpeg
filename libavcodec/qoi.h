@@ -1,4 +1,6 @@
 /*
+ * QOI image format
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,40 +18,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdint.h>
-#include <stdio.h>
+#ifndef AVCODEC_QOI_H
+#define AVCODEC_QOI_H
 
-#include "libavutil/md5.h"
+#define QOI_OP_INDEX  0x00 /* 00xxxxxx */
+#define QOI_OP_DIFF   0x40 /* 01xxxxxx */
+#define QOI_OP_LUMA   0x80 /* 10xxxxxx */
+#define QOI_OP_RUN    0xc0 /* 11xxxxxx */
+#define QOI_OP_RGB    0xfe /* 11111110 */
+#define QOI_OP_RGBA   0xff /* 11111111 */
 
-static void print_md5(uint8_t *md5)
-{
-    int i;
-    for (i = 0; i < 16; i++)
-        printf("%02x", md5[i]);
-    printf("\n");
-}
+#define QOI_MASK_2    0xc0 /* 11000000 */
 
-int main(void)
-{
-    uint8_t md5val[16];
-    int i;
+#define QOI_COLOR_HASH(px) (px[0]*3 + px[1]*5 + px[2]*7 + px[3]*11)
 
-    uint8_t in[1000];
-
-    for (i = 0; i < 1000; i++)
-        in[i] = i * i;
-    av_md5_sum(md5val, in, 1000);
-    print_md5(md5val);
-    av_md5_sum(md5val, in, 63);
-    print_md5(md5val);
-    av_md5_sum(md5val, in, 64);
-    print_md5(md5val);
-    av_md5_sum(md5val, in, 65);
-    print_md5(md5val);
-    for (i = 0; i < 1000; i++)
-        in[i] = i % 127;
-    av_md5_sum(md5val, in, 999);
-    print_md5(md5val);
-
-    return 0;
-}
+#endif /* AVCODEC_QOI_H */
