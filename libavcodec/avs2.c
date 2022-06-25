@@ -1,4 +1,8 @@
 /*
+ * AVS2 related definitions
+ *
+ * Copyright (C) 2022 Zhao Zhili, <zhilizhao@tencent.com>
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,11 +20,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCODEC_X86_FDCT_H
-#define AVCODEC_X86_FDCT_H
+#include "avs2.h"
 
-#include <stdint.h>
-
-void ff_fdct_sse2(int16_t *block);
-
-#endif /* AVCODEC_X86_FDCT_H */
+const AVRational ff_avs2_frame_rate_tab[16] = {
+    { 0    , 0   }, // forbid
+    { 24000, 1001},
+    { 24   , 1   },
+    { 25   , 1   },
+    { 30000, 1001},
+    { 30   , 1   },
+    { 50   , 1   },
+    { 60000, 1001},
+    { 60   , 1   },
+    { 100  , 1   },
+    { 120  , 1   },
+    { 200  , 1   },
+    { 240  , 1   },
+    { 300  , 1   },
+    { 0    , 0   }, // reserved
+    { 0    , 0   }  // reserved
+};

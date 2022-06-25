@@ -2275,6 +2275,7 @@ SYSTEM_FUNCS="
     fcntl
     getaddrinfo
     getauxval
+    getenv
     gethrtime
     getopt
     GetModuleHandle
@@ -3028,6 +3029,8 @@ av1_nvdec_hwaccel_deps="nvdec CUVIDAV1PICPARAMS"
 av1_nvdec_hwaccel_select="av1_decoder"
 av1_vaapi_hwaccel_deps="vaapi VADecPictureParameterBufferAV1_bit_depth_idx"
 av1_vaapi_hwaccel_select="av1_decoder"
+av1_vdpau_hwaccel_deps="vdpau VdpPictureInfoAV1"
+av1_vdpau_hwaccel_select="av1_decoder"
 h263_vaapi_hwaccel_deps="vaapi"
 h263_vaapi_hwaccel_select="h263_decoder"
 h263_videotoolbox_hwaccel_deps="videotoolbox"
@@ -3327,6 +3330,7 @@ libcodec2_encoder_deps="libcodec2"
 libdav1d_decoder_deps="libdav1d"
 libdav1d_decoder_select="atsc_a53"
 libdavs2_decoder_deps="libdavs2"
+libdavs2_decoder_select="avs2_parser"
 libfdk_aac_decoder_deps="libfdk_aac"
 libfdk_aac_encoder_deps="libfdk_aac"
 libfdk_aac_encoder_select="audio_frame_queue"
@@ -6394,6 +6398,7 @@ check_func_headers mfapi.h MFCreateAlignedMemoryBuffer -lmfplat
 
 check_type "vdpau/vdpau.h" "VdpPictureInfoHEVC"
 check_type "vdpau/vdpau.h" "VdpPictureInfoVP9"
+check_type "vdpau/vdpau.h" "VdpPictureInfoAV1"
 
 if [ -z "$nvccflags" ]; then
     nvccflags=$nvccflags_default
