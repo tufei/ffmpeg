@@ -521,6 +521,10 @@ static int get_cox(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *c)
 
     c->cblk_style = bytestream2_get_byteu(&s->g);
     if (c->cblk_style != 0) { // cblk style
+        if (c->cblk_style & JPEG2000_CTSY_HTJ2K_M || c->cblk_style & JPEG2000_CTSY_HTJ2K_F) {
+            av_log(s->avctx, AV_LOG_ERROR, "Support for High throughput JPEG 2000 is not yet available\n");
+            return AVERROR_PATCHWELCOME;
+        }
         av_log(s->avctx, AV_LOG_WARNING, "extra cblk styles %X\n", c->cblk_style);
         if (c->cblk_style & JPEG2000_CBLK_BYPASS)
             av_log(s->avctx, AV_LOG_WARNING, "Selective arithmetic coding bypass\n");
@@ -1679,7 +1683,7 @@ static void decode_refpass(Jpeg2000T1Context *t1, int width, int height,
                 }
 }
 
-static void decode_clnpass(Jpeg2000DecoderContext *s, Jpeg2000T1Context *t1,
+static void decode_clnpass(const Jpeg2000DecoderContext *s, Jpeg2000T1Context *t1,
                            int width, int height, int bpno, int bandno,
                            int seg_symbols, int vert_causal_ctx_csty_symbol)
 {
@@ -1745,7 +1749,7 @@ static void decode_clnpass(Jpeg2000DecoderContext *s, Jpeg2000T1Context *t1,
     }
 }
 
-static int decode_cblk(Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *codsty,
+static int decode_cblk(const Jpeg2000DecoderContext *s, Jpeg2000CodingStyle *codsty,
                        Jpeg2000T1Context *t1, Jpeg2000Cblk *cblk,
                        int width, int height, int bandpos, uint8_t roi_shift)
 {
@@ -1896,7 +1900,7 @@ static void dequantization_int_97(int x, int y, Jpeg2000Cblk *cblk,
     }
 }
 
-static inline void mct_decode(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile)
+static inline void mct_decode(const Jpeg2000DecoderContext *s, Jpeg2000Tile *tile)
 {
     int i, csize = 1;
     void *src[3];
@@ -1937,7 +1941,7 @@ static inline void roi_scale_cblk(Jpeg2000Cblk *cblk,
     }
 }
 
-static inline void tile_codeblocks(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile)
+static inline void tile_codeblocks(const Jpeg2000DecoderContext *s, Jpeg2000Tile *tile)
 {
     Jpeg2000T1Context t1;
 
@@ -2009,7 +2013,7 @@ static inline void tile_codeblocks(Jpeg2000DecoderContext *s, Jpeg2000Tile *tile
 }
 
 #define WRITE_FRAME(D, PIXEL)                                                                     \
-    static inline void write_frame_ ## D(Jpeg2000DecoderContext * s, Jpeg2000Tile * tile,         \
+    static inline void write_frame_ ## D(const Jpeg2000DecoderContext * s, Jpeg2000Tile * tile,   \
                                          AVFrame * picture, int precision)                        \
     {                                                                                             \
         const AVPixFmtDescriptor *pixdesc = av_pix_fmt_desc_get(s->avctx->pix_fmt);               \
@@ -2078,7 +2082,7 @@ WRITE_FRAME(16, uint16_t)
 static int jpeg2000_decode_tile(AVCodecContext *avctx, void *td,
                                 int jobnr, int threadnr)
 {
-    Jpeg2000DecoderContext *s = avctx->priv_data;
+    const Jpeg2000DecoderContext *s = avctx->priv_data;
     AVFrame *picture = td;
     Jpeg2000Tile *tile = s->tile + jobnr;
 
