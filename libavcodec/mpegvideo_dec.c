@@ -73,8 +73,6 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
         s->bitstream_buffer_size = s->allocated_bitstream_buffer_size = 0;
 
         if (s1->context_initialized) {
-//             s->picture_range_start  += MAX_PICTURE_COUNT;
-//             s->picture_range_end    += MAX_PICTURE_COUNT;
             ff_mpv_idct_init(s);
             if ((err = ff_mpv_common_init(s)) < 0) {
                 memset(s, 0, sizeof(*s));
@@ -91,11 +89,6 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
         if ((ret = ff_mpv_common_frame_size_change(s)) < 0)
             return ret;
     }
-
-    s->avctx->coded_height  = s1->avctx->coded_height;
-    s->avctx->coded_width   = s1->avctx->coded_width;
-    s->avctx->width         = s1->avctx->width;
-    s->avctx->height        = s1->avctx->height;
 
     s->quarter_sample       = s1->quarter_sample;
 
@@ -497,14 +490,14 @@ void ff_mpv_frame_end(MpegEncContext *s)
         ff_thread_report_progress(&s->current_picture_ptr->tf, INT_MAX, 0);
 }
 
-void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict)
+void ff_print_debug_info(const MpegEncContext *s, const Picture *p, AVFrame *pict)
 {
     ff_print_debug_info2(s->avctx, pict, s->mbskip_table, p->mb_type,
                          p->qscale_table, p->motion_val,
                          s->mb_width, s->mb_height, s->mb_stride, s->quarter_sample);
 }
 
-int ff_mpv_export_qp_table(MpegEncContext *s, AVFrame *f, Picture *p, int qp_type)
+int ff_mpv_export_qp_table(const MpegEncContext *s, AVFrame *f, const Picture *p, int qp_type)
 {
     AVVideoEncParams *par;
     int mult = (qp_type == FF_MPV_QSCALE_TYPE_MPEG1) ? 2 : 1;
